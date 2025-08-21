@@ -1,5 +1,7 @@
 # `SET_DEPENDENCY_PROVIDER` is supported only with version 3.24+
 cmake_minimum_required(VERSION 3.24)
+include_guard(GLOBAL)
+
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/core")
 
