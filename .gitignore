@@ -12,6 +12,9 @@ CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
 
+# CMake build
+build/
+
 # macOS
 .DS_Store
 
