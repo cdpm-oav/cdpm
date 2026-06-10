@@ -2,8 +2,15 @@
 cmake_minimum_required(VERSION 3.24)
 include_guard(GLOBAL)
 
+message(STATUS "[cdpm] Setup dependency magic")
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/core")
+# Global options & variables
+option(CDPM_DISABLE "Disable cdpm provider")
+option(CDPM_BYPASS "Bypass all `find_package` calls into cmake default implementation")
+set(CDPM_CACHE_PATH "${CMAKE_BINARY_DIR}/.cdpm" CACHE PATH "cdpm cache root directory path")
+
+# Add cdpm modules path as first path to find
+list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/core")
 
 include(cdpm_provide_dependency)
 
