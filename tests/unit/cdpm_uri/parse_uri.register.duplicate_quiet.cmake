@@ -1,6 +1,6 @@
 # Test: parse_uri.register.duplicate_quiet
-include("${CMAKE_SOURCE_DIR}/core/cdpm_uri.cmake")
-include("${CMAKE_SOURCE_DIR}/tests/helpers.cmake")
+include(cdpm_uri)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 cdpm_register_uri_shortcut("mysc" "https://first.example.com/{path}.git")
 cdpm_register_uri_shortcut("mysc" "https://second.example.com/{path}.git" QUIET)

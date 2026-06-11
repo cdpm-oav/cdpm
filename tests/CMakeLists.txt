@@ -18,7 +18,11 @@ function(add_unit_tests)
     foreach(case IN LISTS arg_PASS arg_FAIL)
         set(unit_name "unit.${arg_MODULE}.${case}")
         add_test(NAME "${unit_name}"
-            COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/unit/${arg_MODULE}/${case}.cmake"
+            COMMAND 
+                "${CMAKE_COMMAND}" 
+                    -DCMAKE_MODULE_PATH=${cdpm_root}/core
+                    -DCDPM_TEST_HELPERS=${CMAKE_CURRENT_SOURCE_DIR}
+                    -P "${CMAKE_CURRENT_SOURCE_DIR}/unit/${arg_MODULE}/${case}.cmake"
             WORKING_DIRECTORY "${cdpm_root}"
         )
         set_tests_properties("${unit_name}" 

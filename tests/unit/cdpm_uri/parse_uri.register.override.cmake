@@ -1,6 +1,6 @@
 # Test: parse_uri.register.override
-include("${CMAKE_SOURCE_DIR}/core/cdpm_uri.cmake")
-include("${CMAKE_SOURCE_DIR}/tests/helpers.cmake")
+include(cdpm_uri)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 cdpm_register_uri_shortcut("myov" "https://first.example.com/{path}.git")
 cdpm_register_uri_shortcut("myov" "https://second.example.com/{path}.git" OVERRIDE QUIET)

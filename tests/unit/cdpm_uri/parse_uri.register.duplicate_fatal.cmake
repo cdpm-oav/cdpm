@@ -1,5 +1,5 @@
 # Test: parse_uri.register.duplicate_fatal
-include("${CMAKE_SOURCE_DIR}/core/cdpm_uri.cmake")
+include(cdpm_uri)
 
 # Expects FATAL_ERROR — CTest checks for non-zero exit
 cdpm_register_uri_shortcut("mydup" "https://a.example.com/{path}")

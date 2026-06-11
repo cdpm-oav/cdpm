@@ -1,6 +1,6 @@
 # Test: parse_uri.https.unknown
-include("${CMAKE_SOURCE_DIR}/core/cdpm_uri.cmake")
-include("${CMAKE_SOURCE_DIR}/tests/helpers.cmake")
+include(cdpm_uri)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 cdpm_parse_uri("https://example.com/some/page" PREFIX dep)
 

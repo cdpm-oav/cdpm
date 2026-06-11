@@ -1,6 +1,6 @@
 # Test: parse_uri.shortcut.all_builtins
-include("${CMAKE_SOURCE_DIR}/core/cdpm_uri.cmake")
-include("${CMAKE_SOURCE_DIR}/tests/helpers.cmake")
+include(cdpm_uri)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 set(cases
     "gh:u/r"        "https://github.com/u/r.git"

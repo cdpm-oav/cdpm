@@ -1,6 +1,6 @@
 # Test: parse_uri.register.override_builtin
-include("${CMAKE_SOURCE_DIR}/core/cdpm_uri.cmake")
-include("${CMAKE_SOURCE_DIR}/tests/helpers.cmake")
+include(cdpm_uri)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 cdpm_register_uri_shortcut("gh" "https://mirror.example.com/{path}.git" OVERRIDE QUIET)
 

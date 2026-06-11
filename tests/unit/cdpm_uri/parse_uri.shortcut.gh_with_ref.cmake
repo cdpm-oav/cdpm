@@ -1,6 +1,6 @@
 # Test: parse_uri.shortcut.gh_with_ref
-include("${CMAKE_SOURCE_DIR}/core/cdpm_uri.cmake")
-include("${CMAKE_SOURCE_DIR}/tests/helpers.cmake")
+include(cdpm_uri)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 cdpm_parse_uri("gh:cdpm-oav/cdpm@1.2.3" PREFIX dep)
 
