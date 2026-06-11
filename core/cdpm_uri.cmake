@@ -4,6 +4,8 @@ include_guard(GLOBAL)
 
 cmake_policy(SET CMP0140 NEW)
 
+include(cdpm_utils)
+
 set(__cdpm_uri_builtin_scheme_names
     gh github
     gl gitlab
@@ -58,36 +60,18 @@ function(cdpm_register_uri_shortcut scheme uri_template)
     endif()
 
     string(TOLOWER "${scheme}" scheme_key)
-    get_property(shortcut_registry GLOBAL PROPERTY __cdpm_uri_shortcut_registry)
-    list(FIND shortcut_registry "${scheme_key}" shortcut_idx)
 
-    if(shortcut_idx GREATER_EQUAL 0)
-        # Scheme already exists
-        if(NOT arg_OVERRIDE)
-            if(arg_QUIET)
-                message(WARNING "[cdpm] Shortcut scheme '${scheme_key}' is already registered — skipping. Pass OVERRIDE to replace it.")
-                return()
-            else()
-                message(FATAL_ERROR "[cdpm] Shortcut scheme '${scheme_key}' is already registered. Pass OVERRIDE to replace it, or QUIET to skip silently.")
-            endif()
-        endif()
-
-        # OVERRIDE: warn unless QUIET
-        if(NOT arg_QUIET)
-            if(scheme_key IN_LIST __cdpm_uri_builtin_scheme_names)
-                message(WARNING "[cdpm] Overriding built-in shortcut scheme '${scheme_key}'. "
-                    "Ensure the replacement URL is trusted.")
-            else()
-                message(WARNING "[cdpm] Overriding existing shortcut scheme '${scheme_key}'.")
-            endif()
-        endif()
-
-        math(EXPR template_idx "${shortcut_idx} + 1")
-        list(REMOVE_AT shortcut_registry ${shortcut_idx} ${template_idx})
+    # Forward OVERRIDE/QUIET only when explicitly requested (avoid passing empty flags).
+    set(forward "")
+    if(arg_OVERRIDE)
+        list(APPEND forward OVERRIDE)
+    endif()
+    if(arg_QUIET)
+        list(APPEND forward QUIET)
     endif()
 
-    list(APPEND shortcut_registry "${scheme_key}" "${uri_template}")
-    set_property(GLOBAL PROPERTY __cdpm_uri_shortcut_registry "${shortcut_registry}")
+    _cdpm_kv_registry_set(__cdpm_uri_shortcut_registry "${scheme_key}" "${uri_template}"
+        ${forward} BUILTINS ${__cdpm_uri_builtin_scheme_names})
 endfunction()
 
 # Guesses resource type from a plain URL. (TODO: maybe this is a bad idea)
