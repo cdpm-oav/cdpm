@@ -1,5 +1,5 @@
 # `SET_DEPENDENCY_PROVIDER` is supported only with version 3.24+
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.25)
 include_guard(GLOBAL)
 
 message(STATUS "[cdpm] Setup dependency magic")
