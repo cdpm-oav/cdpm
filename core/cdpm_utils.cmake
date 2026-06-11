@@ -115,20 +115,23 @@ function(_cdpm_kv_registry_set property_name key value)
     if(key_idx GREATER_EQUAL 0)
         if(NOT arg_OVERRIDE)
             if(arg_QUIET)
-                message(WARNING "[cdpm] Registry '${property_name}': key '${key}' is already "
-                    "registered — skipping. Pass OVERRIDE to replace it.")
+                message(WARNING "[cdpm] Registry '${property_name}': key '${key}' is already registered — skipping."
+                    "Pass OVERRIDE to replace it."
+                )
                 return()
             else()
-                message(FATAL_ERROR "[cdpm] Registry '${property_name}': key '${key}' is already "
-                    "registered. Pass OVERRIDE to replace it, or QUIET to skip silently.")
+                message(FATAL_ERROR "[cdpm] Registry '${property_name}': key '${key}' is already registered."
+                    "Pass OVERRIDE to replace it, or QUIET to skip silently."
+                )
             endif()
         endif()
 
         # OVERRIDE: warn unless QUIET.
         if(NOT arg_QUIET)
             if(key IN_LIST arg_BUILTINS)
-                message(WARNING "[cdpm] Overriding built-in registry entry '${key}' in "
-                    "'${property_name}'. Ensure the replacement is trusted.")
+                message(WARNING "[cdpm] Overriding built-in registry entry '${key}' in '${property_name}'."
+                    "Ensure the replacement is trusted."
+                )
             else()
                 message(WARNING "[cdpm] Overriding existing registry entry '${key}' in '${property_name}'.")
             endif()
