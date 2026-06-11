@@ -10,12 +10,35 @@ enable_testing()
 # )
 
 # TODO: make function to register tests by module + pass/fail cases
+function(add_unit_tests)
+    cmake_parse_arguments(arg "" "MODULE" "PASS;FAIL" ${ARGN})
+
+    cmake_path(GET CMAKE_CURRENT_SOURCE_DIR PARENT_PATH cdpm_root)
+
+    foreach(case IN LISTS arg_PASS arg_FAIL)
+        set(unit_name "unit.${arg_MODULE}.${case}")
+        add_test(NAME "${unit_name}"
+            COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/unit/${arg_MODULE}/${case}.cmake"
+            WORKING_DIRECTORY "${cdpm_root}"
+        )
+        set_tests_properties("${unit_name}" 
+            PROPERTIES 
+                LABELS "${arg_MODULE}"
+        )
+    endforeach()
+
+    foreach(case IN LISTS arg_FAIL)
+        set_tests_properties("unit.${arg_MODULE}.${case}"
+            PROPERTIES 
+                WILL_FAIL TRUE
+        )
+    endforeach()
+endfunction()
 
 # cdpm_uri tests
-block(SCOPE_FOR VARIABLES)
-    set(module_name cdpm_uri)
-
-    list(APPEND pass_tests
+add_unit_tests(
+    MODULE cdpm_uri
+    PASS
         parse_uri.shortcut.gh_basic
         parse_uri.shortcut.gh_with_ref
         parse_uri.shortcut.gh_ref_subdir
@@ -32,25 +55,7 @@ block(SCOPE_FOR VARIABLES)
         parse_uri.register.duplicate_quiet
         parse_uri.register.override
         parse_uri.register.override_builtin
-    )
-
-    list(APPEND fail_tests
+    FAIL
         parse_uri.register.duplicate_fatal
         parse_uri.register.missing_path_placeholder
-    )
-
-    foreach(unit_name IN LISTS pass_tests fail_tests)
-        add_test(NAME "unit.${module_name}.${unit_name}"
-            COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/unit/${module_name}/${unit_name}.cmake"
-            WORKING_DIRECTORY "$<PATH:CMAKE_PATH,NORMALIZE,${CMAKE_SOURCE_DIR}/../>"
-        )
-    endforeach()
-
-    foreach(unit_name IN LISTS fail_tests)
-        set_tests_properties("unit.${module_name}.${unit_name}" 
-            PROPERTIES
-                WILL_FAIL TRUE
-        )
-    endforeach()
-
-endblock()
+)
