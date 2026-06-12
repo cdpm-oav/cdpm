@@ -31,3 +31,6 @@ Thumbs.db:encryptable
 
 # Other
 .local/
+
+# cdpm - local overrides and secrets (never commit)
+cdpm_user.json
