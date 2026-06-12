@@ -9,7 +9,6 @@ enable_testing()
 #     WORKING_DIRECTORY "$<PATH:CMAKE_PATH,NORMALIZE,${CMAKE_SOURCE_DIR}/../>"
 # )
 
-# TODO: make function to register tests by module + pass/fail cases
 function(add_unit_tests)
     cmake_parse_arguments(arg "" "MODULE" "PASS;FAIL" ${ARGN})
 
@@ -43,22 +42,22 @@ endfunction()
 add_unit_tests(
     MODULE cdpm_uri
     PASS
-        parse_uri.shortcut.gh_basic
-        parse_uri.shortcut.gh_with_ref
-        parse_uri.shortcut.gh_ref_subdir
-        parse_uri.shortcut.case_insensitive
-        parse_uri.shortcut.all_builtins
-        parse_uri.shortcut.custom
-        parse_uri.https.git_repo
-        parse_uri.https.archive
-        parse_uri.https.unknown
-        parse_uri.ssh
         parse_uri.file
-        parse_uri.plain.scp_style
+        parse_uri.https.archive
+        parse_uri.https.git_repo
+        parse_uri.https.unknown
         parse_uri.plain.local_path
+        parse_uri.plain.scp_style
         parse_uri.register.duplicate_quiet
         parse_uri.register.override
         parse_uri.register.override_builtin
+        parse_uri.shortcut.all_builtins
+        parse_uri.shortcut.case_insensitive
+        parse_uri.shortcut.custom
+        parse_uri.shortcut.gh_basic
+        parse_uri.shortcut.gh_ref_subdir
+        parse_uri.shortcut.gh_with_ref
+        parse_uri.ssh
     FAIL
         parse_uri.register.duplicate_fatal
         parse_uri.register.missing_path_placeholder
