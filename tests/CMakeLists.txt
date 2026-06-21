@@ -74,3 +74,29 @@ add_unit_tests(MODULE cdpm_version
         get_version.non_semver_used_as_is
         get_version.cache_persists
 )
+
+add_unit_tests(MODULE cdpm_config
+    PASS
+        build_system.register_and_get
+        canonical_json.sorts_keys
+        config_blame.layer_origins
+        config_load.layer_merge
+        generate_user_file.basic
+        get_package_source.override_local
+        get_package_source.repo_default
+        get_package_user_kv.tracked_split
+        load_repos.file_and_masks
+        merge_json.deep
+        merge_json.remove_operator
+        pkg_matches_masks
+    FAIL
+        build_system.duplicate_no_override
+        config_load.security.user_integrity
+        generate_user_file.invalid_key
+        get_package_source.override_without_flag
+        get_package_source.override_wrong_type
+        get_package_user_kv.missing_value
+        load_repo.unknown_build_system
+        load_repos.git_missing_baseline
+        load_repos.unknown_kind
+)
