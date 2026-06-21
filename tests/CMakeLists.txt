@@ -62,3 +62,15 @@ add_unit_tests(
         parse_uri.register.duplicate_fatal
         parse_uri.register.missing_path_placeholder
 )
+
+add_unit_tests(MODULE cdpm_version
+    PASS
+        get_version.from_file
+        get_version.strips_whitespace
+        get_version.semver_with_prerelease
+        get_version.semver_with_build_metadata
+        get_version.missing_file_fallback
+        get_version.empty_file_fallback
+        get_version.non_semver_used_as_is
+        get_version.cache_persists
+)
