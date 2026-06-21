@@ -40,4 +40,4 @@ Thumbs.db:encryptable
 cdpm_user.json
 
 # cdpm - test fixture scratch dirs
-tests/unit/cdpm_version/.tmp/
+tests/unit/**/.tmp/
