@@ -103,7 +103,7 @@ function(cdpm_cmd_help)
     message([[
 
 Usage:
-  cmake -P cdpm-cli.cmake -- [--toolchain <path>] [--generator <path>] <command> [arguments]
+  cmake -P cdpm-cli.cmake -- [--toolchain <path>] [--generator <name>] <command> [arguments]
 
 Global options (must appear before the command):
   --toolchain <path>               Path to a CMake toolchain file.
@@ -219,7 +219,9 @@ endfunction()
 # :param toolchain_file: absolute path to a CMake toolchain file, or empty string.
 #                        When non-empty, sets CMAKE_TOOLCHAIN_FILE for this scope so
 #                        cdpm_compute_config_hash and cdpm_build_dependency pick it up.
-function(cdpm_cmd_install pkg_name pkg_version toolchain_file)
+# :param generator:      build system generator name, or empty string. When non-empty, sets
+#                        CMAKE_GENERATOR for this scope so the config hash and child build pick it up.
+function(cdpm_cmd_install pkg_name pkg_version toolchain_file generator)
     _cdpm_print_banner()
 
     if(pkg_name STREQUAL "")
@@ -241,6 +243,12 @@ function(cdpm_cmd_install pkg_name pkg_version toolchain_file)
         set(CMAKE_TOOLCHAIN_FILE "${toolchain_file}")
     endif()
 
+    # Propagate the generator into CMAKE_GENERATOR for this function scope.
+    # cdpm_compute_config_hash reads CMAKE_GENERATOR directly (it is part of the hash inputs).
+    if(NOT generator STREQUAL "")
+        set(CMAKE_GENERATOR "${generator}")
+    endif()
+
     cdpm_config_load()
     cdpm_find_in_repo("${pkg_name}" __found __meta_json)
     if(NOT __found)
@@ -251,6 +259,9 @@ function(cdpm_cmd_install pkg_name pkg_version toolchain_file)
 
     if(NOT toolchain_file STREQUAL "")
         message(STATUS "[cdpm] Toolchain: ${toolchain_file}")
+    endif()
+    if(NOT generator STREQUAL "")
+        message(STATUS "[cdpm] Generator: ${generator}")
     endif()
     message(STATUS "[cdpm] Installing ${pkg_name}@${__resolved_ver} ...")
 
@@ -303,7 +314,8 @@ endfunction()
 # :brief: Reads a lockfile and installs every package listed in it.
 # :param lockfile_path:  path to cdpm.lock.json (empty = ${CMAKE_SOURCE_DIR}/cdpm.lock.json)
 # :param toolchain_file: absolute path to a CMake toolchain file, or empty string
-function(cdpm_cmd_provision lockfile_path toolchain_file)
+# :param generator:      build system generator name, or empty string
+function(cdpm_cmd_provision lockfile_path toolchain_file generator)
     _cdpm_print_banner()
 
     if(lockfile_path STREQUAL "")
@@ -346,7 +358,7 @@ function(cdpm_cmd_provision lockfile_path toolchain_file)
         endif()
 
         message(STATUS "[cdpm] Provisioning ${__pkg_name}@${__locked_ver} ...")
-        cdpm_cmd_install("${__pkg_name}" "${__locked_ver}" "${toolchain_file}")
+        cdpm_cmd_install("${__pkg_name}" "${__locked_ver}" "${toolchain_file}" "${generator}")
     endforeach()
 
     message(STATUS "[cdpm] Provision complete.")

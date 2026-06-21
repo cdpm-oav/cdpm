@@ -2,7 +2,7 @@
 # Entry point for the cdpm command-line interface.
 #
 # Usage:
-#   cmake -P cdpm-cli.cmake -- [--toolchain <path>] [--generator <path>] <command> [arguments]
+#   cmake -P cdpm-cli.cmake -- [--toolchain <path>] [--generator <name>] <command> [arguments]
 #
 # cmake -P passes arguments through CMAKE_ARGV<N>:
 #   CMAKE_ARGV0 = cmake executable path
@@ -92,8 +92,18 @@ endif()
 # ---------------------------------------------------------------------------
 set(CDPM_EFFECTIVE_TOOLCHAIN "")
 
-# Strip --toolchain <path> from CDPM_CLI_ARGS if present (it is a global option,
-# not a positional command argument).
+# ---------------------------------------------------------------------------
+# Resolve effective generator name.
+#
+# Priority: --generator <name> CLI option > CMAKE_GENERATOR variable > empty.
+# The resolved name is stored in CDPM_EFFECTIVE_GENERATOR and also written back
+# into CMAKE_GENERATOR so downstream core modules see a consistent value.
+# Unlike the toolchain, this is a name (not a path) -- no filesystem validation.
+# ---------------------------------------------------------------------------
+set(CDPM_EFFECTIVE_GENERATOR "")
+
+# Strip global options (--toolchain <path>, --generator <name>) from CDPM_CLI_ARGS;
+# they are global options, not positional command arguments.
 set(__CDPM_CLEAN_ARGS "")
 list(LENGTH CDPM_CLI_ARGS __CDPM_NARGS)
 set(__CDPM_GOPT_IDX 0)
@@ -107,6 +117,15 @@ while(__CDPM_GOPT_IDX LESS "${__CDPM_NARGS}")
             math(EXPR __CDPM_GOPT_IDX "${__CDPM_GOPT_IDX} + 2")
         else()
             message(FATAL_ERROR "[cdpm] '--toolchain' requires a path argument.")
+        endif()
+    elseif(__CDPM_GOPT_TOKEN STREQUAL "--generator")
+        math(EXPR __CDPM_GOPT_NEXT "${__CDPM_GOPT_IDX} + 1")
+        if(__CDPM_GOPT_NEXT LESS "${__CDPM_NARGS}")
+            list(GET CDPM_CLI_ARGS ${__CDPM_GOPT_NEXT} CDPM_EFFECTIVE_GENERATOR)
+            # Advance past the value token.
+            math(EXPR __CDPM_GOPT_IDX "${__CDPM_GOPT_IDX} + 2")
+        else()
+            message(FATAL_ERROR "[cdpm] '--generator' requires a name argument.")
         endif()
     else()
         list(APPEND __CDPM_CLEAN_ARGS "${__CDPM_GOPT_TOKEN}")
@@ -134,6 +153,17 @@ if(NOT CDPM_EFFECTIVE_TOOLCHAIN STREQUAL "")
     endif()
     # Make the resolved path visible to core modules as CMAKE_TOOLCHAIN_FILE.
     set(CMAKE_TOOLCHAIN_FILE "${CDPM_EFFECTIVE_TOOLCHAIN}")
+endif()
+
+# Fall back to CMAKE_GENERATOR if --generator was not supplied, then write the
+# resolved name back so core modules see a consistent value (see block above).
+if(CDPM_EFFECTIVE_GENERATOR STREQUAL "" AND DEFINED CMAKE_GENERATOR
+   AND NOT CMAKE_GENERATOR STREQUAL "")
+    set(CDPM_EFFECTIVE_GENERATOR "${CMAKE_GENERATOR}")
+endif()
+
+if(NOT CDPM_EFFECTIVE_GENERATOR STREQUAL "")
+    set(CMAKE_GENERATOR "${CDPM_EFFECTIVE_GENERATOR}")
 endif()
 
 # ---------------------------------------------------------------------------
@@ -182,7 +212,7 @@ elseif(__CDPM_COMMAND STREQUAL "install")
         list(GET CDPM_CLI_ARGS 2 __CDPM_VER)
     endif()
 
-    cdpm_cmd_install("${__CDPM_PKG}" "${__CDPM_VER}" "${CDPM_EFFECTIVE_TOOLCHAIN}")
+    cdpm_cmd_install("${__CDPM_PKG}" "${__CDPM_VER}" "${CDPM_EFFECTIVE_TOOLCHAIN}" "${CDPM_EFFECTIVE_GENERATOR}")
 
 # ---- clean <pkg> [<hash>] -------------------------------------------------
 elseif(__CDPM_COMMAND STREQUAL "clean")
@@ -218,7 +248,7 @@ elseif(__CDPM_COMMAND STREQUAL "provision")
         math(EXPR __CDPM_PROV_IDX "${__CDPM_PROV_IDX} + 1")
     endwhile()
 
-    cdpm_cmd_provision("${__CDPM_LOCKFILE}" "${CDPM_EFFECTIVE_TOOLCHAIN}")
+    cdpm_cmd_provision("${__CDPM_LOCKFILE}" "${CDPM_EFFECTIVE_TOOLCHAIN}" "${CDPM_EFFECTIVE_GENERATOR}")
 
 # ---- add-registry <path> --------------------------------------------------
 elseif(__CDPM_COMMAND STREQUAL "add-registry")
