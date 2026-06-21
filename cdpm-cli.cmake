@@ -229,6 +229,26 @@ elseif(__CDPM_COMMAND STREQUAL "add-registry")
     list(GET CDPM_CLI_ARGS 1 __CDPM_REG_PATH)
     cdpm_cmd_add_registry("${__CDPM_REG_PATH}")
 
+# ---- config <subcommand> --------------------------------------------------
+elseif(__CDPM_COMMAND STREQUAL "config")
+    if(__CDPM_NARGS LESS 2)
+        message(FATAL_ERROR "[cdpm] 'config' requires a subcommand.\n"
+                            "Usage: cmake -P cdpm-cli.cmake -- config blame [<path>]")
+    endif()
+    list(GET CDPM_CLI_ARGS 1 __CDPM_CONFIG_SUB)
+
+    if(__CDPM_CONFIG_SUB STREQUAL "blame")
+        set(__CDPM_BLAME_PATH "")
+        if(__CDPM_NARGS GREATER_EQUAL 3)
+            list(GET CDPM_CLI_ARGS 2 __CDPM_BLAME_PATH)
+        endif()
+        cdpm_cmd_config_blame("${__CDPM_BLAME_PATH}")
+    else()
+        message(FATAL_ERROR
+            "[cdpm] Unknown 'config' subcommand: '${__CDPM_CONFIG_SUB}'\n"
+            "Usage: cmake -P cdpm-cli.cmake -- config blame [<path>]")
+    endif()
+
 # ---- unknown command ------------------------------------------------------
 else()
     message(FATAL_ERROR

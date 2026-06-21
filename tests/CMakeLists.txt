@@ -79,6 +79,7 @@ add_unit_tests(MODULE cdpm_config
     PASS
         build_system.register_and_get
         canonical_json.sorts_keys
+        config_blame.cli_command
         config_blame.layer_origins
         config_load.layer_merge
         generate_user_file.basic

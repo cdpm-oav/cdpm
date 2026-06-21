@@ -122,6 +122,7 @@ Commands:
   clean <pkg> [<hash>]             Remove installed package(s)
   provision [--lockfile <path>]    Install all packages from a lockfile
   add-registry <path>              Register an additional packages.json path
+  config blame [<path>]            Show which config layer last set each value
 
 Environment / cache variables:
   CDPM_STORE_DIR                   Override default package store location
@@ -382,4 +383,55 @@ function(cdpm_cmd_add_registry registry_path)
 
     message(STATUS "[cdpm] Registry added: ${__abs_path}")
     message(STATUS "[cdpm] CDPM_REGISTRY_FILES = ${CDPM_REGISTRY_FILES}")
+endfunction()
+
+# :brief: Reports which config layer last set each tracked path (CLI wrapper over cdpm_config_blame).
+# :param path:   optional dotted path; empty string blames every tracked path
+# :param OUTPUT: optional variable name; when given, the flat `path;label;...` list is returned in the
+#                parent scope and nothing is printed (no banner) -- mirrors cdpm_config_blame and makes
+#                the command strictly testable. Without OUTPUT the result is printed via message(STATUS).
+function(cdpm_cmd_config_blame path)
+    cmake_parse_arguments(arg "" "OUTPUT" "" ${ARGN})
+
+    foreach(__cmd IN ITEMS cdpm_config_load cdpm_config_blame)
+        if(NOT COMMAND ${__cmd})
+            message(FATAL_ERROR
+                "[cdpm] cdpm_config.cmake is not loaded. "
+                "Make sure cdpm-cli.cmake includes it before invoking 'config blame'."
+            )
+        endif()
+    endforeach()
+
+    cdpm_config_load()
+
+    if(path STREQUAL "")
+        cdpm_config_blame(OUTPUT __blame)
+    else()
+        cdpm_config_blame(PATH "${path}" OUTPUT __blame)
+    endif()
+
+    # Quiet mode: return the flat list, print nothing (no banner).
+    if(DEFINED arg_OUTPUT)
+        set(${arg_OUTPUT} "${__blame}" PARENT_SCOPE)
+        return()
+    endif()
+
+    _cdpm_print_banner()
+
+    list(LENGTH __blame __n)
+    if(__n EQUAL 0)
+        message(STATUS "[cdpm] config blame: no recorded origins.")
+        return()
+    endif()
+
+    message("[cdpm] Config blame (which layer last set each value):")
+    math(EXPR __pairs "${__n} / 2 - 1")
+    foreach(__p RANGE 0 ${__pairs})
+        math(EXPR __ki "${__p} * 2")
+        math(EXPR __li "${__ki} + 1")
+        list(GET __blame ${__ki} __k)
+        list(GET __blame ${__li} __l)
+        message("  ${__k} <- ${__l}")
+    endforeach()
+    message("")
 endfunction()
