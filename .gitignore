@@ -41,3 +41,4 @@ cdpm_user.json
 
 # cdpm - test fixture scratch dirs
 tests/unit/**/.tmp/
+tests/integration/**/.tmp/
