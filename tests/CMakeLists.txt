@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.25)
 
 project(cdpm_tests)
 
+option(CDPM_TEST_NETWORK "Enables network-required tests")
+
 enable_testing()
 
 # Get core root path
@@ -35,7 +37,7 @@ function(add_unit_tests)
 endfunction()
 
 function(add_integration_tests)
-    cmake_parse_arguments(arg "" "" "PASS" ${ARGN})
+    cmake_parse_arguments(arg "" "" "PASS;NETWORK" ${ARGN})
 
     foreach(case IN LISTS arg_PASS)
         set(test_name "integration.${case}")
@@ -49,6 +51,22 @@ function(add_integration_tests)
         )
         set_tests_properties("${test_name}" PROPERTIES LABELS "integration")
     endforeach()
+
+    # NETWORK cases need internet + Git; registered only when CDPM_TEST_NETWORK is ON.
+    if(CDPM_TEST_NETWORK)
+        foreach(case IN LISTS arg_NETWORK)
+            set(test_name "integration.${case}")
+            add_test(NAME "${test_name}"
+                COMMAND
+                    "${CMAKE_COMMAND}"
+                        -DCMAKE_MODULE_PATH=${cdpm_root}/core
+                        -DCDPM_TEST_HELPERS=${CMAKE_CURRENT_SOURCE_DIR}
+                        -P "${CMAKE_CURRENT_SOURCE_DIR}/integration/${case}.cmake"
+                WORKING_DIRECTORY "${cdpm_root}"
+            )
+            set_tests_properties("${test_name}" PROPERTIES LABELS "integration;network")
+        endforeach()
+    endif()
 endfunction()
 
 # cdpm_uri tests
@@ -131,6 +149,8 @@ add_integration_tests(
         build_cmake_driver
         build_cmake_driver_patch
         provider_find_package
+    NETWORK
+        provider_fmt_e2e
 )
 
 add_unit_tests(MODULE cdpm_config
