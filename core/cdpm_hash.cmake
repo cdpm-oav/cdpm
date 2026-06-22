@@ -4,8 +4,10 @@ include_guard(GLOBAL)
 
 cmake_policy(SET CMP0140 NEW)
 
-# JSON iteration helpers (_cdpm_json_foreach / _cdpm_json_get).
+# JSON iteration helpers (_cdpm_json_foreach / _cdpm_json_get) and the shared
+# patch-applicability resolver (cdpm_resolve_patch_list).
 include(cdpm_utils)
+include(cdpm_verange)
 
 # .. rst:
 # ``_cdpm_hash_compiler_part(<lang> <out_part>)``
@@ -73,12 +75,13 @@ endfunction()
 # .. rst:
 # ``_cdpm_hash_patches_part(<meta_json> <version> <out_part>)``
 #
-# Builds the hash contribution for the source patches applied to ``<version>``. Patch files live in the
-# configuration repository alongside the package metadata and are listed (in apply order) under
-# ``versions.<version>.patches`` as an array of paths. Each existing patch file contributes the SHA-256 of
-# its content, so editing a patch forces a rebuild (mirroring Spack's per-patch sha256 and vcpkg's
-# per-patch ABI entries). Paths are resolved relative to ``CMAKE_SOURCE_DIR`` when not absolute. A missing
-# ``patches`` array yields an empty contribution. Order is preserved verbatim (apply order is significant).
+# Builds the hash contribution for the source patches that *apply to* ``<version>``. The applicable set and
+# its order come from :cmake:command:`cdpm_resolve_patch_list` - the same resolver the build driver uses -
+# so a patch that is scoped out of this version (via ``applies_to``/``exclude``) never perturbs its hash,
+# and a version that does receive a patch is bound to that patch's content. Each existing patch file
+# contributes the SHA-256 of its content, so editing a patch forces a rebuild (mirroring Spack's per-patch
+# sha256 and vcpkg's per-patch ABI entries). Paths are resolved relative to ``CMAKE_SOURCE_DIR`` when not
+# absolute. No applicable patches yields an empty contribution. Apply order is preserved verbatim.
 function(_cdpm_hash_patches_part meta_json version out_part)
     set(result "")
 
@@ -87,17 +90,7 @@ function(_cdpm_hash_patches_part meta_json version out_part)
         return(PROPAGATE ${out_part})
     endif()
 
-    string(JSON patches ERROR_VARIABLE perr GET "${meta_json}" "versions" "${version}" "patches")
-    if(perr OR patches STREQUAL "")
-        set(${out_part} "")
-        return(PROPAGATE ${out_part})
-    endif()
-
-    string(JSON patch_type ERROR_VARIABLE terr TYPE "${meta_json}" "versions" "${version}" "patches")
-    if(terr OR NOT patch_type STREQUAL "ARRAY")
-        set(${out_part} "")
-        return(PROPAGATE ${out_part})
-    endif()
+    cdpm_resolve_patch_list("${meta_json}" "${version}" patches)
 
     string(JSON count LENGTH "${patches}")
     if(count EQUAL 0)
