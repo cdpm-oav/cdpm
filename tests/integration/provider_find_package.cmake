@@ -1,0 +1,151 @@
+# Integration: provider_find_package
+#
+# End-to-end test of the cdpm dependency provider through a real find_package() during a
+# sub-CMake configure -- no network. A consumer project includes cdpm.cmake (via
+# CMAKE_PROJECT_TOP_LEVEL_INCLUDES) and calls find_package(greet REQUIRED CONFIG). The greet
+# package is declared in a local registry and resolved through a local source_override that points
+# at the in-tree greet fixture, so the provider builds + installs it into a temp store and the
+# consumer's find_package finds the generated greetConfig.cmake.
+#
+# Also exercises the CDPM_ALLOW_SYSTEM_PACKAGES gate: an unknown package must be fatal when the gate
+# is OFF and must fall through (bypass) when it is ON.
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
+
+# cdpm root = parent of the tests dir; the driver runs from there (WORKING_DIRECTORY).
+cmake_path(GET CMAKE_CURRENT_LIST_DIR PARENT_PATH __tests_dir)
+cmake_path(GET __tests_dir PARENT_PATH __cdpm_root)
+set(cdpm_entry "${__cdpm_root}/cdpm.cmake")
+
+set(fixture "${CMAKE_CURRENT_LIST_DIR}/fixtures/greet")
+set(consumer "${CMAKE_CURRENT_LIST_DIR}/fixtures/provider_consumer")
+
+set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/provider_find_package")
+file(REMOVE_RECURSE "${tmp}")
+file(MAKE_DIRECTORY "${tmp}")
+
+set(store "${tmp}/store")
+set(consumer_build "${tmp}/consumer-build")
+
+# In script mode CMAKE_GENERATOR is empty; only forward -G when a generator is actually set,
+# otherwise let CMake pick the platform default for the sub-configure.
+set(gen_args "")
+if(DEFINED CMAKE_GENERATOR AND NOT CMAKE_GENERATOR STREQUAL "")
+    set(gen_args -G "${CMAKE_GENERATOR}")
+endif()
+
+# ---- Local registry declaring greet (git source is a placeholder; never fetched because the
+#      consumer config supplies a local source_override that wins). ----------------------------
+set(registry "${tmp}/packages.json")
+file(WRITE "${registry}" [[{
+  "repo_schema": 1,
+  "packages": {
+    "greet": {
+      "build_system": "cmake",
+      "source": { "type": "git", "url": "https://example.invalid/greet.git" },
+      "default_version": "1.0.0",
+      "versions": {
+        "1.0.0": { "rev": "0000000000000000000000000000000000000000" }
+      }
+    }
+  }
+}]])
+
+# ---- Consumer project config (cdpm.json): point at the registry and override greet's source to
+#      the local fixture so the build is offline + deterministic. -------------------------------
+set(project_config "${tmp}/cdpm.json")
+file(WRITE "${project_config}"
+"{\n"
+"  \"allow_source_override\": true,\n"
+"  \"repos\": [ { \"kind\": \"file\", \"path\": \"${registry}\" } ],\n"
+"  \"packages\": {\n"
+"    \"greet\": {\n"
+"      \"source_override\": { \"type\": \"local\", \"path\": \"${fixture}\" }\n"
+"    }\n"
+"  }\n"
+"}\n")
+
+# ---------------------------------------------------------------------------
+# Case 1: find_package(greet REQUIRED) resolves through the provider.
+# ---------------------------------------------------------------------------
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        -S "${consumer}"
+        -B "${consumer_build}"
+        ${gen_args}
+        "-DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=${cdpm_entry}"
+        "-DCDPM_STORE_DIR=${store}"
+        "-DCDPM_PROJECT_CONFIG=${project_config}"
+        "-DCMAKE_BUILD_TYPE=Release"
+    RESULT_VARIABLE rc
+    OUTPUT_VARIABLE out
+    ERROR_VARIABLE err
+)
+if(NOT rc EQUAL 0)
+    message(FATAL_ERROR "FAIL: consumer configure failed (rc=${rc})\n--- stdout ---\n${out}\n--- stderr ---\n${err}")
+endif()
+
+# The greet package must be installed in the store with a sentinel and a usable config file.
+file(GLOB greet_slots LIST_DIRECTORIES true "${store}/greet/*")
+assert_ne("${greet_slots}" "" "greet was installed into the store")
+list(GET greet_slots 0 greet_slot)
+if(NOT EXISTS "${greet_slot}/.cdpm_installed")
+    message(FATAL_ERROR "FAIL: greet store slot has no .cdpm_installed sentinel: ${greet_slot}")
+endif()
+file(GLOB_RECURSE greet_cfg "${greet_slot}/greetConfig.cmake")
+assert_ne("${greet_cfg}" "" "greetConfig.cmake was installed by the provider")
+
+# ---------------------------------------------------------------------------
+# Case 2: re-configure is idempotent (sentinel skip -- no rebuild).
+# ---------------------------------------------------------------------------
+file(TIMESTAMP "${greet_slot}/.cdpm_installed" ts1)
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        -S "${consumer}"
+        -B "${consumer_build}"
+        ${gen_args}
+        "-DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=${cdpm_entry}"
+        "-DCDPM_STORE_DIR=${store}"
+        "-DCDPM_PROJECT_CONFIG=${project_config}"
+        "-DCMAKE_BUILD_TYPE=Release"
+    RESULT_VARIABLE rc2
+    OUTPUT_VARIABLE out2
+    ERROR_VARIABLE err2
+)
+if(NOT rc2 EQUAL 0)
+    message(FATAL_ERROR "FAIL: second consumer configure failed (rc=${rc2})\n${out2}\n${err2}")
+endif()
+file(TIMESTAMP "${greet_slot}/.cdpm_installed" ts2)
+assert_eq("${ts1}" "${ts2}" "second configure is idempotent (sentinel unchanged)")
+
+# ---------------------------------------------------------------------------
+# Case 3: unknown package is fatal when CDPM_ALLOW_SYSTEM_PACKAGES is OFF.
+# ---------------------------------------------------------------------------
+set(unknown_consumer "${tmp}/unknown")
+file(MAKE_DIRECTORY "${unknown_consumer}")
+file(WRITE "${unknown_consumer}/CMakeLists.txt"
+"cmake_minimum_required(VERSION 3.25)\n"
+"project(unknown_consumer LANGUAGES CXX)\n"
+"find_package(definitely_not_a_real_pkg REQUIRED)\n")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        -S "${unknown_consumer}"
+        -B "${tmp}/unknown-build"
+        ${gen_args}
+        "-DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=${cdpm_entry}"
+        "-DCDPM_STORE_DIR=${store}"
+        "-DCDPM_PROJECT_CONFIG=${project_config}"
+    RESULT_VARIABLE rc3
+    OUTPUT_VARIABLE out3
+    ERROR_VARIABLE err3
+)
+if(rc3 EQUAL 0)
+    message(FATAL_ERROR "FAIL: unknown package configure should have failed with the gate OFF")
+endif()
+string(FIND "${err3}${out3}" "CDPM_ALLOW_SYSTEM_PACKAGES" gate_hint)
+if(gate_hint EQUAL -1)
+    message(FATAL_ERROR "FAIL: fatal message should mention the CDPM_ALLOW_SYSTEM_PACKAGES gate.\n${err3}")
+endif()
+
+file(REMOVE_RECURSE "${tmp}")
+message(STATUS "PASS: cdpm provider resolves find_package end-to-end, is idempotent, and gates unknown packages")

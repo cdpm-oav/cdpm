@@ -16,10 +16,11 @@ file(MAKE_DIRECTORY "${tmp}")
 set(src "${tmp}/src")
 file(COPY "${fixture}/" DESTINATION "${src}")
 
-# A unified diff that rewrites the greeting string.
+# A unified diff that rewrites the greeting string. The context must match the
+# committed fixture verbatim (filler line + no space before the brace).
 set(patch "${tmp}/0001-greeting.patch")
 file(WRITE "${patch}"
-"--- a/include/greet.hpp\n+++ b/include/greet.hpp\n@@ -1,2 +1,2 @@\n #pragma once\n-inline const char* greet() { return \"hello from greet\"; }\n+inline const char* greet() { return \"patched greeting\"; }\n")
+"--- a/include/greet.hpp\n+++ b/include/greet.hpp\n@@ -1,3 +1,3 @@\n // Filler header for test\n #pragma once\n-inline const char* greet(){ return \"hello from greet\"; }\n+inline const char* greet(){ return \"patched greeting\"; }\n")
 
 set(CDPM_STORE_DIR "${tmp}/store")
 set(CMAKE_BINARY_DIR "${tmp}/bin")
