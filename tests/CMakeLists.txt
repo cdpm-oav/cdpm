@@ -119,6 +119,7 @@ add_unit_tests(MODULE cdpm_build
     PASS
         prepare_source.local
         collect_patches.absolute
+        collect_patches.applies_to
         build.sentinel_skip
     FAIL
         build.unimplemented_driver

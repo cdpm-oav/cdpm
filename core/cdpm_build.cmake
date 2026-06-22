@@ -6,12 +6,13 @@ cmake_policy(SET CMP0140 NEW)
 
 # JSON helpers, config (source/options/user), toolchain synthesis, config hash.
 include(cdpm_utils)
+include(cdpm_verange)
 include(cdpm_config)
 include(cdpm_toolchain)
 include(cdpm_hash)
 
 # cdpm root (parent of core/) captured at include time. Driver module paths from the
-# registry are relative to this root (e.g. core/build/cdpm_bs_cmake.cmake).
+# registry are relative to this root (e.g. core/bs/cdpm_bs_cmake.cmake).
 cmake_path(GET CMAKE_CURRENT_LIST_DIR PARENT_PATH __CDPM_BUILD_ROOT)
 set(__CDPM_BUILD_ROOT "${__CDPM_BUILD_ROOT}" CACHE INTERNAL "cdpm root dir for build drivers")
 
@@ -84,31 +85,19 @@ endfunction()
 # .. rst:
 # ``cdpm_collect_patches(<pkg_name> <pkg_version> <meta_json> <out_patches_json>)``
 #
-# Returns the declared source patches for ``<pkg_version>`` (``versions.<version>.patches``) as a JSON
-# array of *absolute* paths in apply order, in ``<out_patches_json>`` (``[]`` when none). Relative paths are
-# resolved against ``CMAKE_SOURCE_DIR``; a missing file is fatal. The patches are applied by the build
-# driver via ExternalProject's ``PATCH_COMMAND`` (``git apply``), and their contents already feed the
-# config hash (see :cmake:command:`cdpm_compute_config_hash`).
+# Returns the source patches that apply to ``<pkg_version>`` as a JSON array of *absolute* paths in apply
+# order, in ``<out_patches_json>`` (``[]`` when none). The applicable set and its order come from
+# :cmake:command:`cdpm_resolve_patch_list` (package-level ``patches[]`` filtered by ``applies_to``/
+# ``exclude``, then per-version ``versions.<version>.patches``). Relative paths are resolved against
+# ``CMAKE_SOURCE_DIR``; a missing file is fatal. The patches are applied by the build driver via
+# ExternalProject's ``PATCH_COMMAND`` (``git apply``), and their contents already feed the config hash
+# (see :cmake:command:`cdpm_compute_config_hash`).
 function(cdpm_collect_patches pkg_name pkg_version meta_json out_patches_json)
     string(TOLOWER "${pkg_name}" name)
     set(result "[]")
 
-    if(meta_json STREQUAL "" OR pkg_version STREQUAL "")
-        set(${out_patches_json} "${result}")
-        return(PROPAGATE ${out_patches_json})
-    endif()
-
-    string(JSON patches ERROR_VARIABLE perr GET "${meta_json}" "versions" "${pkg_version}" "patches")
-    if(perr OR patches STREQUAL "")
-        set(${out_patches_json} "${result}")
-        return(PROPAGATE ${out_patches_json})
-    endif()
-    string(JSON ptype ERROR_VARIABLE terr TYPE "${meta_json}" "versions" "${pkg_version}" "patches")
-    if(terr OR NOT ptype STREQUAL "ARRAY")
-        set(${out_patches_json} "${result}")
-        return(PROPAGATE ${out_patches_json})
-    endif()
-    string(JSON count LENGTH "${patches}")
+    cdpm_resolve_patch_list("${meta_json}" "${pkg_version}" specs)
+    string(JSON count LENGTH "${specs}")
     if(count EQUAL 0)
         set(${out_patches_json} "${result}")
         return(PROPAGATE ${out_patches_json})
@@ -116,7 +105,7 @@ function(cdpm_collect_patches pkg_name pkg_version meta_json out_patches_json)
 
     math(EXPR last "${count} - 1")
     foreach(i RANGE 0 ${last})
-        string(JSON patch_path GET "${patches}" ${i})
+        string(JSON patch_path GET "${specs}" ${i})
         if(NOT IS_ABSOLUTE "${patch_path}")
             cmake_path(ABSOLUTE_PATH patch_path BASE_DIRECTORY "${CMAKE_SOURCE_DIR}" NORMALIZE
                 OUTPUT_VARIABLE patch_path)
@@ -176,7 +165,7 @@ function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
     endif()
 
     # ---- Build directory --------------------------------------------------------
-    set(build_dir "${CMAKE_BINARY_DIR}/.cdpm/build/${name}-${config_hash}")
+    set(build_dir "${CMAKE_BINARY_DIR}/.cdpm/bs/${name}-${config_hash}")
 
     # ---- Select the build-system driver -----------------------------------------
     set(bs "cmake")
