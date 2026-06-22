@@ -105,6 +105,21 @@ add_unit_tests(MODULE cdpm_toolchain
         prepare.synthesize
 )
 
+add_unit_tests(MODULE cdpm_build
+    PASS
+        prepare_source.local
+        collect_patches.absolute
+        build.sentinel_skip
+    FAIL
+        build.unimplemented_driver
+)
+
+add_integration_tests(
+    PASS
+        build_cmake_driver
+        build_cmake_driver_patch
+)
+
 add_unit_tests(MODULE cdpm_config
     PASS
         build_system.register_and_get
