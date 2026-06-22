@@ -14,9 +14,9 @@ assert_true("${found}" "lookup is case-insensitive")
 cdpm_get_build_system("meson" mod found)
 assert_false("${found}" "unregistered driver not found")
 
-cdpm_register_build_system("meson" "core/build/cdpm_bs_meson.cmake")
+cdpm_register_build_system("meson" "core/bs/cdpm_bs_meson.cmake")
 cdpm_get_build_system("meson" mod found)
 assert_true("${found}" "registered driver found")
-assert_eq("${mod}" "core/build/cdpm_bs_meson.cmake" "registered module path returned")
+assert_eq("${mod}" "core/bs/cdpm_bs_meson.cmake" "registered module path returned")
 
 message(STATUS "PASS: build-system registry registers and resolves drivers")

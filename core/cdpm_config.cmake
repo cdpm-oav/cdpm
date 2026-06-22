@@ -4,10 +4,9 @@ include_guard(GLOBAL)
 
 cmake_policy(SET CMP0140 NEW)
 
-# JSON iteration helpers (_cdpm_json_foreach / _cdpm_json_get).
-include("${CMAKE_CURRENT_LIST_DIR}/cdpm_utils.cmake")
-# URI parsing/validation (cdpm_parse_uri) - used by repo source validation.
-include("${CMAKE_CURRENT_LIST_DIR}/cdpm_uri.cmake")
+include(cdpm_utils) # JSON iteration helpers (_cdpm_json_foreach / _cdpm_json_get).
+include(cdpm_uri) # URI parsing/validation (cdpm_parse_uri) - used by repo source validation.
+include(cdpm_verange) # Version-range primitive (cdpm_parse_version_range) - used to validate patch/option ranges.
 
 # .. rst:
 # ``_cdpm_json_set_safe(<json> <key> <value> <value_type> <out_json>)``
@@ -607,10 +606,10 @@ set(__cdpm_build_system_builtin_names
 # (not the cache, not global variables), exactly like __cdpm_uri_shortcut_registry.
 set_property(GLOBAL PROPERTY __cdpm_build_systems "")
 
-# Seed the built-in drivers (module paths are conventional: core/build/cdpm_bs_<name>.cmake).
+# Seed the built-in drivers (module paths are conventional: core/bs/cdpm_bs_<name>.cmake).
 block(SCOPE_FOR VARIABLES)
     foreach(bs IN LISTS __cdpm_build_system_builtin_names)
-        list(APPEND drivers "${bs}" "core/build/cdpm_bs_${bs}.cmake")
+        list(APPEND drivers "${bs}" "core/bs/cdpm_bs_${bs}.cmake")
     endforeach()
     set_property(GLOBAL PROPERTY __cdpm_build_systems "${drivers}")
 endblock()
@@ -738,12 +737,120 @@ function(_cdpm_validate_repo_source pkg_name pkg_json)
 endfunction()
 
 # .. rst:
+# ``_cdpm_validate_repo_patches(<pkg_name> <pkg_json>)``
+#
+# Validates the optional package-level ``patches`` array. Each entry must be an object carrying a non-empty
+# ``file`` and, when present, an ``applies_to`` whose ranges parse via the version-range grammar (string,
+# array of versions, or ``{from,to,...}`` object). A missing ``file`` or an unparseable range is fatal -
+# the registry is committed metadata, so authoring errors should surface at load time, not at build time.
+function(_cdpm_validate_repo_patches pkg_name pkg_json)
+    string(JSON patches ERROR_VARIABLE p_err GET "${pkg_json}" "patches")
+    if(p_err)
+        return()
+    endif()
+    string(JSON p_type ERROR_VARIABLE pt_err TYPE "${pkg_json}" "patches")
+    if(pt_err OR NOT p_type STREQUAL "ARRAY")
+        message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': 'patches' must be an array of objects.")
+    endif()
+
+    string(JSON count LENGTH "${patches}")
+    if(count EQUAL 0)
+        return()
+    endif()
+    math(EXPR last "${count} - 1")
+    foreach(i RANGE 0 ${last})
+        string(JSON entry GET "${patches}" ${i})
+
+        string(JSON file ERROR_VARIABLE f_err GET "${entry}" "file")
+        if(f_err OR file STREQUAL "")
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': patches[${i}] is missing 'file'.")
+        endif()
+
+        # Validate any applies_to ranges by attempting a parse against a dummy version.
+        string(JSON applies ERROR_VARIABLE at_err GET "${entry}" "applies_to")
+        if(NOT at_err)
+            string(JSON applies GET "${entry}" "applies_to")
+            string(JSON at_type ERROR_VARIABLE att_err TYPE "${entry}" "applies_to")
+            if(at_type STREQUAL "STRING")
+                cdpm_parse_version_range("${applies}" lo hi li hii ok)
+                if(NOT ok)
+                    message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': patches[${i}] applies_to "
+                        "'${applies}' is not a valid version range.")
+                endif()
+            elseif(at_type STREQUAL "ARRAY")
+                string(JSON ac LENGTH "${applies}")
+                if(ac GREATER 0)
+                    math(EXPR al "${ac} - 1")
+                    foreach(j RANGE 0 ${al})
+                        string(JSON v GET "${applies}" ${j})
+                        cdpm_parse_version_range("${v}" lo hi li hii ok)
+                        if(NOT ok)
+                            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': patches[${i}] "
+                                "applies_to[${j}] '${v}' is not a valid version.")
+                        endif()
+                    endforeach()
+                endif()
+            elseif(NOT at_type STREQUAL "OBJECT")
+                message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': patches[${i}] applies_to must "
+                    "be a string, array, or object.")
+            endif()
+        endif()
+    endforeach()
+endfunction()
+
+# .. rst:
+# ``_cdpm_validate_repo_version_options(<pkg_name> <pkg_json>)``
+#
+# Validates the optional package-level ``version_options`` array: each entry must carry a ``range`` string
+# that parses via the version-range grammar and an ``options`` object. These supply default build options
+# to a span of versions (lower precedence than per-version ``options``). A bad range or a non-object
+# ``options`` is fatal.
+function(_cdpm_validate_repo_version_options pkg_name pkg_json)
+    string(JSON vo ERROR_VARIABLE vo_err GET "${pkg_json}" "version_options")
+    if(vo_err)
+        return()
+    endif()
+    string(JSON vo_type ERROR_VARIABLE vot_err TYPE "${pkg_json}" "version_options")
+    if(vot_err OR NOT vo_type STREQUAL "ARRAY")
+        message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': 'version_options' must be an array.")
+    endif()
+
+    string(JSON count LENGTH "${vo}")
+    if(count EQUAL 0)
+        return()
+    endif()
+    math(EXPR last "${count} - 1")
+    foreach(i RANGE 0 ${last})
+        string(JSON entry GET "${vo}" ${i})
+
+        string(JSON range ERROR_VARIABLE r_err GET "${entry}" "range")
+        if(r_err OR range STREQUAL "")
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': version_options[${i}] is missing "
+                "'range'.")
+        endif()
+        cdpm_parse_version_range("${range}" lo hi li hii ok)
+        if(NOT ok)
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': version_options[${i}] range "
+                "'${range}' is not a valid version range.")
+        endif()
+
+        string(JSON opts_type ERROR_VARIABLE ot_err TYPE "${entry}" "options")
+        if(ot_err OR NOT opts_type STREQUAL "OBJECT")
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': version_options[${i}] requires an "
+                "'options' object.")
+        endif()
+    endforeach()
+endfunction()
+
+# .. rst:
 # ``_cdpm_validate_repo_package(<pkg_name> <pkg_json>)``
 #
 # Validates one package entry from a repository: a ``source`` object
 # (via :cmake:command:`_cdpm_validate_repo_source`) and per-version integrity - ``source.type=url``
 # requires ``sha256`` on every version, ``source.type=git`` requires a full ``rev``. Missing integrity data
-# is a fatal error. When a ``build_system`` is declared it must name a registered driver.
+# is a fatal error. When a ``build_system`` is declared it must name a registered driver. Optional
+# package-level ``patches`` and ``version_options`` arrays are range-validated
+# (:cmake:command:`_cdpm_validate_repo_patches` / :cmake:command:`_cdpm_validate_repo_version_options`).
 function(_cdpm_validate_repo_package pkg_name pkg_json)
     _cdpm_validate_repo_source("${pkg_name}" "${pkg_json}")
 
@@ -756,6 +863,11 @@ function(_cdpm_validate_repo_package pkg_name pkg_json)
                 "(no driver registered). Register one via cdpm_register_build_system().")
         endif()
     endif()
+
+    # Package-level patches[] applicability ranges and version_options[] ranges
+    # must parse - a malformed range is a registry authoring error, caught early.
+    _cdpm_validate_repo_patches("${pkg_name}" "${pkg_json}")
+    _cdpm_validate_repo_version_options("${pkg_name}" "${pkg_json}")
 
     string(JSON src_type GET "${pkg_json}" "source" "type")
 
@@ -1310,30 +1422,65 @@ endfunction()
 #
 # Computes the effective build options for ``<pkg_name>`` at ``<pkg_version>`` along the vertical
 # (low -> high):
-#   repository version options
-#   -> global + per-package ``options`` (via _cdpm_effective_package_section)
-#   -> ``CDPM_<PKG>_OPTIONS`` cache override (KEY=VAL;... CLI override)
+#
+# #. repository package-level ``options`` (the default for *every* version);
+# #. repository ``version_options[]`` whose ``range`` matches ``<pkg_version>`` (in declared order, so a
+#    later matching block wins over an earlier one);
+# #. repository per-version ``versions.<v>.options`` (a point override for one version);
+# #. global + per-package ``options`` from the effective config (via ``_cdpm_effective_package_section``);
+# #. ``CDPM_<PKG>_OPTIONS`` cache override (``KEY=VAL;...`` CLI override).
+#
 # The combined object is canonicalized once (sorted keys, bool->true/false) so it can feed ``config_hash``
 # deterministically. The repository metadata is fetched via :cmake:command:`cdpm_find_in_repo`.
 function(cdpm_get_package_options pkg_name pkg_version out_options_json)
     string(TOLOWER "${pkg_name}" name)
     string(TOUPPER "${pkg_name}" upper)
 
-    # Layer 1: repository version options (lowest precedence).
     set(effective "{}")
     cdpm_find_in_repo("${name}" found meta)
-    if(found AND NOT pkg_version STREQUAL "")
-        string(JSON ver_opts ERROR_VARIABLE vo_err GET "${meta}" "versions" "${pkg_version}" "options")
-        if(NOT vo_err)
-            set(effective "${ver_opts}")
+
+    if(found)
+        # Layer 1: package-level options - default for all versions.
+        string(JSON pkg_opts ERROR_VARIABLE po_err GET "${meta}" "options")
+        if(NOT po_err)
+            cdpm_merge_json("${effective}" "${pkg_opts}" effective)
+        endif()
+
+        if(NOT pkg_version STREQUAL "")
+            # Layer 2: version_options[] whose range matches this version.
+            string(JSON vopts ERROR_VARIABLE vop_err GET "${meta}" "version_options")
+            if(NOT vop_err)
+                string(JSON vop_type ERROR_VARIABLE vot_err TYPE "${meta}" "version_options")
+                if(NOT vot_err AND vop_type STREQUAL "ARRAY")
+                    string(JSON vop_count LENGTH "${vopts}")
+                    if(vop_count GREATER 0)
+                        math(EXPR vop_last "${vop_count} - 1")
+                        foreach(i RANGE 0 ${vop_last})
+                            string(JSON entry GET "${vopts}" ${i})
+                            string(JSON range GET "${entry}" "range")
+                            cdpm_version_in_range("${pkg_version}" "${range}" in_range)
+                            if(in_range)
+                                string(JSON entry_opts GET "${entry}" "options")
+                                cdpm_merge_json("${effective}" "${entry_opts}" effective)
+                            endif()
+                        endforeach()
+                    endif()
+                endif()
+            endif()
+
+            # Layer 3: per-version options - a point override.
+            string(JSON ver_opts ERROR_VARIABLE vo_err GET "${meta}" "versions" "${pkg_version}" "options")
+            if(NOT vo_err)
+                cdpm_merge_json("${effective}" "${ver_opts}" effective)
+            endif()
         endif()
     endif()
 
-    # Layer 2: global + per-package options from the effective config.
+    # Layer 4: global + per-package options from the effective config.
     _cdpm_effective_package_section("${name}" "options" cfg_opts)
     cdpm_merge_json("${effective}" "${cfg_opts}" effective)
 
-    # Layer 3: CDPM_<PKG>_OPTIONS cache override (highest precedence).
+    # Layer 5: CDPM_<PKG>_OPTIONS cache override (highest precedence).
     if(DEFINED CDPM_${upper}_OPTIONS AND NOT CDPM_${upper}_OPTIONS STREQUAL "")
         _cdpm_parse_kv_options("${CDPM_${upper}_OPTIONS}" cli_opts)
         cdpm_merge_json("${effective}" "${cli_opts}" effective)

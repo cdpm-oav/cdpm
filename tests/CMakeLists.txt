@@ -105,6 +105,7 @@ add_unit_tests(MODULE cdpm_hash
         compute.options_change_hash
         compute.compiler_version_changes_hash
         compute.patch_changes_hash
+        compute.patch_applicability
         compute.toolchain_var_changes_hash
 )
 
@@ -129,6 +130,7 @@ add_integration_tests(
     PASS
         build_cmake_driver
         build_cmake_driver_patch
+        provider_find_package
 )
 
 add_unit_tests(MODULE cdpm_config
@@ -139,6 +141,7 @@ add_unit_tests(MODULE cdpm_config
         config_blame.layer_origins
         config_load.layer_merge
         generate_user_file.basic
+        get_package_options.layers
         get_package_source.override_local
         get_package_source.repo_default
         get_package_user_kv.tracked_split
@@ -154,6 +157,7 @@ add_unit_tests(MODULE cdpm_config
         get_package_source.override_wrong_type
         get_package_user_kv.missing_value
         load_repo.unknown_build_system
+        load_repo.bad_version_range
         load_repos.git_missing_baseline
         load_repos.unknown_kind
 )
