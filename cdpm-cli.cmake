@@ -39,6 +39,11 @@ if(EXISTS "${__CDPM_HASH_MODULE}")
     include("${__CDPM_HASH_MODULE}")
 endif()
 
+set(__CDPM_TOOLCHAIN_MODULE "${__CDPM_ROOT}/core/cdpm_toolchain.cmake")
+if(EXISTS "${__CDPM_TOOLCHAIN_MODULE}")
+    include("${__CDPM_TOOLCHAIN_MODULE}")
+endif()
+
 set(__CDPM_BUILD_MODULE "${__CDPM_ROOT}/core/cdpm_build.cmake")
 if(EXISTS "${__CDPM_BUILD_MODULE}")
     include("${__CDPM_BUILD_MODULE}")
