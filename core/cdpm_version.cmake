@@ -55,7 +55,8 @@ if(NOT DEFINED __CDPM_VERSION_CACHED)
         endif()
 
         set(__CDPM_VERSION_CACHED "${__cdpm_version_raw}"
-            CACHE INTERNAL "cdpm version string (loaded from VERSION file)" FORCE)
+            CACHE INTERNAL "cdpm version string (loaded from VERSION file)" FORCE
+        )
     endblock()
 endif()
 
