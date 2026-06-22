@@ -7,6 +7,8 @@ message(STATUS "[cdpm] Setup dependency magic")
 # Global options & variables
 option(CDPM_DISABLE "Disable cdpm provider")
 option(CDPM_BYPASS "Bypass all `find_package` calls into cmake default implementation")
+option(CDPM_ALLOW_SYSTEM_PACKAGES "Fall back to a system find_package when a package is absent from the registry")
+
 set(CDPM_CACHE_PATH "${CMAKE_BINARY_DIR}/.cdpm" CACHE PATH "cdpm cache root directory path")
 
 # Add cdpm modules path as first path to find
