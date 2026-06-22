@@ -75,6 +75,16 @@ add_unit_tests(MODULE cdpm_version
         get_version.cache_persists
 )
 
+add_unit_tests(MODULE cdpm_hash
+    PASS
+        compute.deterministic
+        compute.build_type_changes_hash
+        compute.options_change_hash
+        compute.compiler_version_changes_hash
+        compute.patch_changes_hash
+        compute.toolchain_var_changes_hash
+)
+
 add_unit_tests(MODULE cdpm_config
     PASS
         build_system.register_and_get
