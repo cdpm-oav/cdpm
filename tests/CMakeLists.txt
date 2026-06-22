@@ -88,6 +88,16 @@ add_unit_tests(MODULE cdpm_version
         get_version.cache_persists
 )
 
+add_unit_tests(MODULE cdpm_verange
+    PASS
+        parse.brackets
+        parse.open_ends
+        in_range.membership
+        in_ranges.forms_and_excludes
+    FAIL
+        in_range.invalid_fatal
+)
+
 add_unit_tests(MODULE cdpm_hash
     PASS
         compute.deterministic
