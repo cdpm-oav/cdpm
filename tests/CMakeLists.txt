@@ -85,6 +85,13 @@ add_unit_tests(MODULE cdpm_hash
         compute.toolchain_var_changes_hash
 )
 
+add_unit_tests(MODULE cdpm_toolchain
+    PASS
+        prepare.wrapper_includes_external
+        prepare.freezes_allowlist
+        prepare.synthesize
+)
+
 add_unit_tests(MODULE cdpm_config
     PASS
         build_system.register_and_get
