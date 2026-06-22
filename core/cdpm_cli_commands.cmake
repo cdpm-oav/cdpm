@@ -32,28 +32,29 @@ endfunction()
 # Sets __CDPM_RESOLVED_STORE_DIR in parent scope.
 function(_cdpm_resolve_store_dir)
     if(DEFINED CDPM_STORE_DIR AND NOT CDPM_STORE_DIR STREQUAL "")
-        set(__CDPM_RESOLVED_STORE_DIR "${CDPM_STORE_DIR}" PARENT_SCOPE)
-        return()
+        set(__CDPM_RESOLVED_STORE_DIR "${CDPM_STORE_DIR}")
+        return(PROPAGATE __CDPM_RESOLVED_STORE_DIR)
     endif()
 
     if(DEFINED ENV{CDPM_STORE_DIR} AND NOT "$ENV{CDPM_STORE_DIR}" STREQUAL "")
-        set(__CDPM_RESOLVED_STORE_DIR "$ENV{CDPM_STORE_DIR}" PARENT_SCOPE)
-        return()
+        set(__CDPM_RESOLVED_STORE_DIR "$ENV{CDPM_STORE_DIR}")
+        return(PROPAGATE __CDPM_RESOLVED_STORE_DIR)
     endif()
 
     if(WIN32)
         if(DEFINED ENV{LOCALAPPDATA} AND NOT "$ENV{LOCALAPPDATA}" STREQUAL "")
-            set(__CDPM_RESOLVED_STORE_DIR "$ENV{LOCALAPPDATA}/.cdpm/store" PARENT_SCOPE)
+            set(__CDPM_RESOLVED_STORE_DIR "$ENV{LOCALAPPDATA}/.cdpm/store")
         else()
-            set(__CDPM_RESOLVED_STORE_DIR "${CMAKE_BINARY_DIR}/_cdpm/store" PARENT_SCOPE)
+            set(__CDPM_RESOLVED_STORE_DIR "${CMAKE_BINARY_DIR}/.cdpm/store")
         endif()
     else()
         if(DEFINED ENV{HOME} AND NOT "$ENV{HOME}" STREQUAL "")
-            set(__CDPM_RESOLVED_STORE_DIR "$ENV{HOME}/.cdpm/store" PARENT_SCOPE)
+            set(__CDPM_RESOLVED_STORE_DIR "$ENV{HOME}/.cdpm/store")
         else()
-            set(__CDPM_RESOLVED_STORE_DIR "${CMAKE_BINARY_DIR}/_cdpm/store" PARENT_SCOPE)
+            set(__CDPM_RESOLVED_STORE_DIR "${CMAKE_BINARY_DIR}/.cdpm/store")
         endif()
     endif()
+    return(PROPAGATE __CDPM_RESOLVED_STORE_DIR)
 endfunction()
 
 # :brief: Collects all installed package entries under the store directory.
@@ -64,8 +65,8 @@ function(_cdpm_list_installed_packages out_list)
     set(__result "")
 
     if(NOT EXISTS "${__CDPM_RESOLVED_STORE_DIR}")
-        set(${out_list} "" PARENT_SCOPE)
-        return()
+        set(${out_list} "")
+        return(PROPAGATE ${out_list})
     endif()
 
     file(GLOB __pkg_dirs LIST_DIRECTORIES true "${__CDPM_RESOLVED_STORE_DIR}/*")
@@ -88,7 +89,8 @@ function(_cdpm_list_installed_packages out_list)
         endforeach()
     endforeach()
 
-    set(${out_list} "${__result}" PARENT_SCOPE)
+    set(${out_list} "${__result}")
+    return(PROPAGATE ${out_list})
 endfunction()
 
 # ---------------------------------------------------------------------------
@@ -391,7 +393,8 @@ function(cdpm_cmd_add_registry registry_path)
     endif()
 
     set(CDPM_REGISTRY_FILES "${CDPM_REGISTRY_FILES}"
-        CACHE STRING "Semicolon-separated list of cdpm registry (packages.json) paths" FORCE)
+        CACHE STRING "Semicolon-separated list of cdpm registry (packages.json) paths" FORCE
+    )
 
     message(STATUS "[cdpm] Registry added: ${__abs_path}")
     message(STATUS "[cdpm] CDPM_REGISTRY_FILES = ${CDPM_REGISTRY_FILES}")
@@ -424,8 +427,8 @@ function(cdpm_cmd_config_blame path)
 
     # Quiet mode: return the flat list, print nothing (no banner).
     if(DEFINED arg_OUTPUT)
-        set(${arg_OUTPUT} "${__blame}" PARENT_SCOPE)
-        return()
+        set(${arg_OUTPUT} "${__blame}")
+        return(PROPAGATE ${arg_OUTPUT})
     endif()
 
     _cdpm_print_banner()
