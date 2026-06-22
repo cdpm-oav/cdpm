@@ -39,7 +39,8 @@ function(_cdpm_json_set_safe json key value value_type out_json)
         set(json_value "${value}")
     endif()
     string(JSON updated SET "${json}" "${key}" "${json_value}")
-    set(${out_json} "${updated}" PARENT_SCOPE)
+    set(${out_json} "${updated}")
+    return(PROPAGATE ${out_json})
 endfunction()
 
 # .. rst:
@@ -55,20 +56,21 @@ function(_cdpm_split_key_operator raw_key out_key out_op)
     # Escaped literal: trailing "!!" -> literal single "!" suffix, no operator.
     if(raw_key MATCHES "!!$")
         string(REGEX REPLACE "!!$" "!" literal "${raw_key}")
-        set(${out_key} "${literal}" PARENT_SCOPE)
-        set(${out_op} "" PARENT_SCOPE)
-        return()
+        set(${out_key} "${literal}")
+        set(${out_op} "")
+        return(PROPAGATE ${out_key} ${out_op})
     endif()
 
     # Single trailing "!" -> REPLACE operator.
     if(raw_key MATCHES "^(.+)!$")
-        set(${out_key} "${CMAKE_MATCH_1}" PARENT_SCOPE)
-        set(${out_op} "REPLACE" PARENT_SCOPE)
-        return()
+        set(${out_key} "${CMAKE_MATCH_1}")
+        set(${out_op} "REPLACE")
+        return(PROPAGATE ${out_key} ${out_op})
     endif()
 
-    set(${out_key} "${raw_key}" PARENT_SCOPE)
-    set(${out_op} "" PARENT_SCOPE)
+    set(${out_key} "${raw_key}")
+    set(${out_op} "")
+    return(PROPAGATE ${out_key} ${out_op})
 endfunction()
 
 # .. rst:
@@ -90,8 +92,8 @@ function(cdpm_merge_json base_json overlay_json out_json)
     # If overlay is not an object, or base is not an object, overlay replaces base.
     if(overlay_err OR NOT overlay_type STREQUAL "OBJECT"
             OR base_err OR NOT base_type STREQUAL "OBJECT")
-        set(${out_json} "${overlay_json}" PARENT_SCOPE)
-        return()
+        set(${out_json} "${overlay_json}")
+        return(PROPAGATE ${out_json})
     endif()
 
     set(result "${base_json}")
@@ -129,7 +131,8 @@ function(cdpm_merge_json base_json overlay_json out_json)
         endif()
     endforeach()
 
-    set(${out_json} "${result}" PARENT_SCOPE)
+    set(${out_json} "${result}")
+    return(PROPAGATE ${out_json})
 endfunction()
 
 # .. rst:
@@ -148,8 +151,8 @@ function(cdpm_canonical_json json out_json)
 
     if(type_err)
         # Not valid JSON we can introspect - pass through unchanged.
-        set(${out_json} "${json}" PARENT_SCOPE)
-        return()
+        set(${out_json} "${json}")
+        return(PROPAGATE ${out_json})
     endif()
 
     if(value_type STREQUAL "OBJECT")
@@ -160,7 +163,7 @@ function(cdpm_canonical_json json out_json)
         set(canonical "{}")
         foreach(key IN LISTS keys)
             _cdpm_json_get("${json}" "${key}" child child_type)
-            if(child_type STREQUAL "OBJECT" OR child_type STREQUAL "ARRAY")
+            if(child_type MATCHES [[^(OBJECT|ARRAY)$]])
                 # Recurse to sort nested members; result is valid JSON, set directly.
                 cdpm_canonical_json("${child}" child_canonical)
                 string(JSON canonical SET "${canonical}" "${key}" "${child_canonical}")
@@ -169,8 +172,8 @@ function(cdpm_canonical_json json out_json)
                 _cdpm_json_set_safe("${canonical}" "${key}" "${child}" "${child_type}" canonical)
             endif()
         endforeach()
-        set(${out_json} "${canonical}" PARENT_SCOPE)
-        return()
+        set(${out_json} "${canonical}")
+        return(PROPAGATE ${out_json})
     endif()
 
     if(value_type STREQUAL "ARRAY")
@@ -182,7 +185,7 @@ function(cdpm_canonical_json json out_json)
             foreach(i RANGE 0 ${arr_last})
                 string(JSON element_type ERROR_VARIABLE et_err TYPE "${json}" ${i})
                 string(JSON element GET "${json}" ${i})
-                if(element_type STREQUAL "OBJECT" OR element_type STREQUAL "ARRAY")
+                if(element_type MATCHES [[^(OBJECT|ARRAY)$]])
                     cdpm_canonical_json("${element}" element_canonical)
                     string(JSON canonical SET "${canonical}" ${i} "${element_canonical}")
                 else()
@@ -190,22 +193,23 @@ function(cdpm_canonical_json json out_json)
                 endif()
             endforeach()
         endif()
-        set(${out_json} "${canonical}" PARENT_SCOPE)
-        return()
+        set(${out_json} "${canonical}")
+        return(PROPAGATE ${out_json})
     endif()
 
     if(value_type STREQUAL "BOOLEAN")
         # Normalize ON/OFF (and any truthy form) back to JSON literals.
         if(json)
-            set(${out_json} "true" PARENT_SCOPE)
+            set(${out_json} "true")
         else()
-            set(${out_json} "false" PARENT_SCOPE)
+            set(${out_json} "false")
         endif()
-        return()
+        return(PROPAGATE ${out_json})
     endif()
 
     # STRING / NUMBER / NULL - emit as-is.
-    set(${out_json} "${json}" PARENT_SCOPE)
+    set(${out_json} "${json}")
+    return(PROPAGATE ${out_json})
 endfunction()
 
 # =============================================================================
@@ -228,7 +232,8 @@ function(_cdpm_builtin_defaults out_json)
         "allow_source_override": false,
         "store_dir": null
     }]=])
-    set(${out_json} "${defaults}" PARENT_SCOPE)
+    set(${out_json} "${defaults}")
+    return(PROPAGATE ${out_json})
 endfunction()
 
 # .. rst:
@@ -361,8 +366,9 @@ function(_cdpm_extract_repos layer_json inout_repos_var out_stripped_json)
         set(stripped "${layer_json}")
     endif()
 
-    set(${inout_repos_var} "${repos_acc}" PARENT_SCOPE)
-    set(${out_stripped_json} "${stripped}" PARENT_SCOPE)
+    set(${inout_repos_var} "${repos_acc}")
+    set(${out_stripped_json} "${stripped}")
+    return(PROPAGATE ${inout_repos_var} ${out_stripped_json})
 endfunction()
 
 # .. rst:
@@ -384,7 +390,7 @@ function(_cdpm_record_origins layer_json label inout_origins_var)
         list(APPEND acc "${key}" "${label}")
 
         # Descend one level into the well-known container sections only.
-        if(key STREQUAL "packages" OR key STREQUAL "user" OR key STREQUAL "options")
+        if(key MATCHES [[^(packages|user|options)$]])
             string(JSON sub_type ERROR_VARIABLE t_err TYPE "${layer_json}" "${raw_key}")
             if(NOT t_err AND sub_type STREQUAL "OBJECT")
                 string(JSON sub GET "${layer_json}" "${raw_key}")
@@ -397,7 +403,8 @@ function(_cdpm_record_origins layer_json label inout_origins_var)
         endif()
     endforeach()
 
-    set(${inout_origins_var} "${acc}" PARENT_SCOPE)
+    set(${inout_origins_var} "${acc}")
+    return(PROPAGATE ${inout_origins_var})
 endfunction()
 
 # .. rst:
@@ -566,8 +573,8 @@ function(cdpm_config_blame)
     endif()
 
     if(DEFINED arg_OUTPUT)
-        set(${arg_OUTPUT} "${result}" PARENT_SCOPE)
-        return()
+        set(${arg_OUTPUT} "${result}")
+        return(PROPAGATE ${arg_OUTPUT})
     endif()
 
     list(LENGTH result rn)
@@ -592,8 +599,9 @@ endfunction()
 # Built-in driver names. Overriding one of these triggers a stronger
 # trust warning via the _cdpm_kv_registry_* BUILTINS contract.
 set(__cdpm_build_system_builtin_names
-    cmake autotools make b2 openssl custom
-    CACHE INTERNAL "cdpm built-in build-system driver names" FORCE)
+    cmake autotools make b2 openssl custom gn
+    CACHE INTERNAL "cdpm built-in build-system driver names" FORCE
+)
 
 # Driver registry - flat list `name;module;name;module;...` in a GLOBAL property
 # (not the cache, not global variables), exactly like __cdpm_uri_shortcut_registry.
@@ -648,8 +656,9 @@ endfunction()
 function(cdpm_get_build_system name out_module out_found)
     string(TOLOWER "${name}" name_key)
     _cdpm_kv_registry_get(__cdpm_build_systems "${name_key}" module found)
-    set(${out_module} "${module}" PARENT_SCOPE)
-    set(${out_found} "${found}" PARENT_SCOPE)
+    set(${out_module} "${module}")
+    set(${out_found} "${found}")
+    return(PROPAGATE ${out_module} ${out_found})
 endfunction()
 
 # =============================================================================
@@ -787,8 +796,8 @@ function(_cdpm_pkg_matches_masks name masks_json out_ok)
     string(JSON masks_len ERROR_VARIABLE len_err LENGTH "${masks_json}")
     if(len_err OR masks_len EQUAL 0)
         # No masks declared: the repository owns every package.
-        set(${out_ok} TRUE PARENT_SCOPE)
-        return()
+        set(${out_ok} TRUE)
+        return(PROPAGATE ${out_ok})
     endif()
 
     math(EXPR last "${masks_len} - 1")
@@ -800,16 +809,17 @@ function(_cdpm_pkg_matches_masks name masks_json out_ok)
             math(EXPR prefix_len "${mask_len} - 1")
             string(SUBSTRING "${mask}" 0 ${prefix_len} prefix)
             if(name MATCHES "^${prefix}")
-                set(${out_ok} TRUE PARENT_SCOPE)
-                return()
+                set(${out_ok} TRUE)
+                return(PROPAGATE ${out_ok})
             endif()
         elseif(name STREQUAL mask)
-            set(${out_ok} TRUE PARENT_SCOPE)
-            return()
+            set(${out_ok} TRUE)
+            return(PROPAGATE ${out_ok})
         endif()
     endforeach()
 
-    set(${out_ok} FALSE PARENT_SCOPE)
+    set(${out_ok} FALSE)
+    return(PROPAGATE ${out_ok})
 endfunction()
 
 # .. rst:
@@ -933,7 +943,8 @@ function(_cdpm_resolve_store_dir out_dir)
     endif()
 
     file(MAKE_DIRECTORY "${dir}")
-    set(${out_dir} "${dir}" PARENT_SCOPE)
+    set(${out_dir} "${dir}")
+    return(PROPAGATE ${out_dir})
 endfunction()
 
 # .. rst:
@@ -963,8 +974,8 @@ function(_cdpm_clone_repo_baseline url baseline out_repo_file)
 
     # Content-addressed reuse: a present packages.json means a verified checkout.
     if(EXISTS "${repo_file}")
-        set(${out_repo_file} "${repo_file}" PARENT_SCOPE)
-        return()
+        set(${out_repo_file} "${repo_file}")
+        return(PROPAGATE ${out_repo_file})
     endif()
 
     file(REMOVE_RECURSE "${checkout}")
@@ -972,25 +983,29 @@ function(_cdpm_clone_repo_baseline url baseline out_repo_file)
 
     # Fetch only the pinned commit (modern servers allow fetch-by-SHA).
     execute_process(COMMAND "${GIT_EXECUTABLE}" init --quiet "${checkout}"
-        RESULT_VARIABLE rc ERROR_VARIABLE err)
+        RESULT_VARIABLE rc ERROR_VARIABLE err
+    )
     if(NOT rc EQUAL 0)
         message(FATAL_ERROR "[cdpm] git repo '${url}': git init failed: ${err}")
     endif()
     execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${checkout}" fetch --quiet --depth 1
             "${url}" "${baseline}"
-        RESULT_VARIABLE rc ERROR_VARIABLE err)
+        RESULT_VARIABLE rc ERROR_VARIABLE err
+    )
     if(NOT rc EQUAL 0)
         message(FATAL_ERROR "[cdpm] git repo '${url}': fetch of baseline ${baseline} failed: ${err}")
     endif()
     execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${checkout}" checkout --quiet FETCH_HEAD
-        RESULT_VARIABLE rc ERROR_VARIABLE err)
+        RESULT_VARIABLE rc ERROR_VARIABLE err
+    )
     if(NOT rc EQUAL 0)
         message(FATAL_ERROR "[cdpm] git repo '${url}': checkout of baseline failed: ${err}")
     endif()
 
     # Verify the resolved HEAD matches the requested pin.
     execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${checkout}" rev-parse HEAD
-        OUTPUT_VARIABLE head OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE rc)
+        OUTPUT_VARIABLE head OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE rc
+    )
     string(TOLOWER "${head}" head)
     string(TOLOWER "${baseline}" want)
     if(NOT rc EQUAL 0 OR NOT head STREQUAL want)
@@ -1003,7 +1018,8 @@ function(_cdpm_clone_repo_baseline url baseline out_repo_file)
             "repository root.")
     endif()
 
-    set(${out_repo_file} "${repo_file}" PARENT_SCOPE)
+    set(${out_repo_file} "${repo_file}")
+    return(PROPAGATE ${out_repo_file})
 endfunction()
 
 # .. rst:
@@ -1217,8 +1233,9 @@ function(cdpm_resolve_version pkg_name meta_json requested_version out_version o
         endif()
     endif()
 
-    set(${out_version} "${selected}" PARENT_SCOPE)
-    set(${out_compat_version} "${compat}" PARENT_SCOPE)
+    set(${out_version} "${selected}")
+    set(${out_compat_version} "${compat}")
+    return(PROPAGATE ${out_version} ${out_compat_version})
 endfunction()
 
 # =============================================================================
@@ -1284,7 +1301,8 @@ function(_cdpm_parse_kv_options spec out_json)
             _cdpm_json_set_safe("${result}" "${key}" "${val}" "STRING" result)
         endforeach()
     endif()
-    set(${out_json} "${result}" PARENT_SCOPE)
+    set(${out_json} "${result}")
+    return(PROPAGATE ${out_json})
 endfunction()
 
 # .. rst:
@@ -1322,7 +1340,8 @@ function(cdpm_get_package_options pkg_name pkg_version out_options_json)
     endif()
 
     cdpm_canonical_json("${effective}" canonical)
-    set(${out_options_json} "${canonical}" PARENT_SCOPE)
+    set(${out_options_json} "${canonical}")
+    return(PROPAGATE ${out_options_json})
 endfunction()
 
 # .. rst:
@@ -1374,8 +1393,9 @@ function(cdpm_get_package_user_kv pkg_name out_tracked_json out_untracked_json)
     endforeach()
 
     cdpm_canonical_json("${tracked}" tracked_canon)
-    set(${out_tracked_json} "${tracked_canon}" PARENT_SCOPE)
-    set(${out_untracked_json} "${untracked}" PARENT_SCOPE)
+    set(${out_tracked_json} "${tracked_canon}")
+    set(${out_untracked_json} "${untracked}")
+    return(PROPAGATE ${out_tracked_json} ${out_untracked_json})
 endfunction()
 
 # .. rst:
@@ -1473,7 +1493,8 @@ function(_cdpm_user_key_to_cmake key out_var)
     endif()
     string(TOUPPER "${key}" up)
     string(REGEX REPLACE "[.-]" "_" up "${up}")
-    set(${out_var} "${up}" PARENT_SCOPE)
+    set(${out_var} "${up}")
+    return(PROPAGATE ${out_var})
 endfunction()
 
 # .. rst:
@@ -1538,6 +1559,7 @@ function(cdpm_generate_user_file pkg_name out_path)
 
     if(arg_TRACKED_HASH)
         string(SHA256 thash "${tracked}")
-        set(${arg_TRACKED_HASH} "${thash}" PARENT_SCOPE)
+        set(${arg_TRACKED_HASH} "${thash}")
+        return(PROPAGATE ${arg_TRACKED_HASH})
     endif()
 endfunction()
