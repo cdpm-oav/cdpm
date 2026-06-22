@@ -5,6 +5,9 @@
 cmake_minimum_required(VERSION 3.26)
 
 include(cdpm_version)
+# Provides the single _cdpm_resolve_store_dir(<out>) contract, cdpm_config_load and cdpm_load_repos.
+# (cdpm_config does not include this module, so there is no include cycle.)
+include(cdpm_config)
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -28,48 +31,19 @@ function(_cdpm_print_banner)
     message(${__CDPM_CLI_BANNER})
 endfunction()
 
-# :brief: Resolves CDPM_STORE_DIR: ENV override > platform default > binary-dir fallback.
-# Sets __CDPM_RESOLVED_STORE_DIR in parent scope.
-function(_cdpm_resolve_store_dir)
-    if(DEFINED CDPM_STORE_DIR AND NOT CDPM_STORE_DIR STREQUAL "")
-        set(__CDPM_RESOLVED_STORE_DIR "${CDPM_STORE_DIR}")
-        return(PROPAGATE __CDPM_RESOLVED_STORE_DIR)
-    endif()
-
-    if(DEFINED ENV{CDPM_STORE_DIR} AND NOT "$ENV{CDPM_STORE_DIR}" STREQUAL "")
-        set(__CDPM_RESOLVED_STORE_DIR "$ENV{CDPM_STORE_DIR}")
-        return(PROPAGATE __CDPM_RESOLVED_STORE_DIR)
-    endif()
-
-    if(WIN32)
-        if(DEFINED ENV{LOCALAPPDATA} AND NOT "$ENV{LOCALAPPDATA}" STREQUAL "")
-            set(__CDPM_RESOLVED_STORE_DIR "$ENV{LOCALAPPDATA}/.cdpm/store")
-        else()
-            set(__CDPM_RESOLVED_STORE_DIR "${CMAKE_BINARY_DIR}/.cdpm/store")
-        endif()
-    else()
-        if(DEFINED ENV{HOME} AND NOT "$ENV{HOME}" STREQUAL "")
-            set(__CDPM_RESOLVED_STORE_DIR "$ENV{HOME}/.cdpm/store")
-        else()
-            set(__CDPM_RESOLVED_STORE_DIR "${CMAKE_BINARY_DIR}/.cdpm/store")
-        endif()
-    endif()
-    return(PROPAGATE __CDPM_RESOLVED_STORE_DIR)
-endfunction()
-
 # :brief: Collects all installed package entries under the store directory.
 # Each element has the form "<pkg_name>|<hash>|<install_dir>".
 # :param out_list: output variable name
 function(_cdpm_list_installed_packages out_list)
-    _cdpm_resolve_store_dir()
+    _cdpm_resolve_store_dir(__store)
     set(__result "")
 
-    if(NOT EXISTS "${__CDPM_RESOLVED_STORE_DIR}")
+    if(NOT EXISTS "${__store}")
         set(${out_list} "")
         return(PROPAGATE ${out_list})
     endif()
 
-    file(GLOB __pkg_dirs LIST_DIRECTORIES true "${__CDPM_RESOLVED_STORE_DIR}/*")
+    file(GLOB __pkg_dirs LIST_DIRECTORIES true "${__store}/*")
     foreach(__pkg_dir IN LISTS __pkg_dirs)
         if(NOT IS_DIRECTORY "${__pkg_dir}")
             continue()
@@ -145,8 +119,8 @@ endfunction()
 # :brief: Lists all packages currently installed in the store.
 function(cdpm_cmd_list)
     _cdpm_print_banner()
-    _cdpm_resolve_store_dir()
-    message("[cdpm] Store directory: ${__CDPM_RESOLVED_STORE_DIR}")
+    _cdpm_resolve_store_dir(__store)
+    message("[cdpm] Store directory: ${__store}")
     message("")
 
     _cdpm_list_installed_packages(__packages)
@@ -183,10 +157,17 @@ function(cdpm_cmd_info pkg_name)
         )
     endif()
     cdpm_config_load()
+    # Materialize the declared repositories (kind=file|git) into CDPM_MERGED_REPO; without this
+    # cdpm_find_in_repo() always misses.
+    cdpm_load_repos()
 
     cdpm_find_in_repo("${pkg_name}" __found __meta_json)
     if(NOT __found)
-        message(FATAL_ERROR "[cdpm] Package '${pkg_name}' not found in any loaded repository.")
+        message(FATAL_ERROR
+            "[cdpm] Package '${pkg_name}' not found in any loaded repository.\n"
+            "Declare a registry in cdpm.json (\"repos\": [ { \"kind\": \"file\", \"path\": "
+            "\"<.../packages.json>\" } ]) or run 'add-registry <path>'."
+        )
     endif()
 
     message("[cdpm] Metadata for package '${pkg_name}':")
@@ -230,7 +211,7 @@ function(cdpm_cmd_install pkg_name pkg_version toolchain_file generator)
         message(FATAL_ERROR "[cdpm] 'install' requires a package name.")
     endif()
 
-    foreach(__cmd IN ITEMS cdpm_config_load cdpm_find_in_repo
+    foreach(__cmd IN ITEMS cdpm_config_load cdpm_load_repos cdpm_find_in_repo
                            cdpm_resolve_version cdpm_compute_config_hash
                            cdpm_build_dependency)
         if(NOT COMMAND ${__cmd})
@@ -252,12 +233,17 @@ function(cdpm_cmd_install pkg_name pkg_version toolchain_file generator)
     endif()
 
     cdpm_config_load()
+    cdpm_load_repos()
     cdpm_find_in_repo("${pkg_name}" __found __meta_json)
     if(NOT __found)
-        message(FATAL_ERROR "[cdpm] Package '${pkg_name}' not found in any loaded repository.")
+        message(FATAL_ERROR
+            "[cdpm] Package '${pkg_name}' not found in any loaded repository.\n"
+            "Declare a registry in cdpm.json (\"repos\": [ { \"kind\": \"file\", \"path\": "
+            "\"<.../packages.json>\" } ]) or run 'add-registry <path>'."
+        )
     endif()
 
-    cdpm_resolve_version("${pkg_name}" "${__meta_json}" "${pkg_version}" __resolved_ver)
+    cdpm_resolve_version("${pkg_name}" "${__meta_json}" "${pkg_version}" __resolved_ver __compat_ver)
 
     if(NOT toolchain_file STREQUAL "")
         message(STATUS "[cdpm] Toolchain: ${toolchain_file}")
@@ -268,8 +254,8 @@ function(cdpm_cmd_install pkg_name pkg_version toolchain_file generator)
     message(STATUS "[cdpm] Installing ${pkg_name}@${__resolved_ver} ...")
 
     cdpm_compute_config_hash("${pkg_name}" "${__resolved_ver}" "${__meta_json}" __hash)
-    _cdpm_resolve_store_dir()
-    set(__install_dir "${__CDPM_RESOLVED_STORE_DIR}/${pkg_name}/${__hash}")
+    _cdpm_resolve_store_dir(__store)
+    set(__install_dir "${__store}/${pkg_name}/${__hash}")
 
     if(EXISTS "${__install_dir}/.cdpm_installed")
         message(STATUS "[cdpm] ${pkg_name}@${__resolved_ver} [${__hash}] already installed -- skipping.")
@@ -291,8 +277,8 @@ function(cdpm_cmd_clean pkg_name pkg_hash)
         message(FATAL_ERROR "[cdpm] 'clean' requires a package name.")
     endif()
 
-    _cdpm_resolve_store_dir()
-    set(__pkg_root "${__CDPM_RESOLVED_STORE_DIR}/${pkg_name}")
+    _cdpm_resolve_store_dir(__store)
+    set(__pkg_root "${__store}/${pkg_name}")
 
     if(NOT EXISTS "${__pkg_root}")
         message(STATUS "[cdpm] Nothing to clean for '${pkg_name}'.")
@@ -328,7 +314,7 @@ function(cdpm_cmd_provision lockfile_path toolchain_file generator)
         message(FATAL_ERROR "[cdpm] Lockfile not found: ${lockfile_path}")
     endif()
 
-    foreach(__cmd IN ITEMS cdpm_config_load cdpm_find_in_repo
+    foreach(__cmd IN ITEMS cdpm_config_load cdpm_load_repos cdpm_find_in_repo
                            cdpm_resolve_version cdpm_compute_config_hash
                            cdpm_build_dependency)
         if(NOT COMMAND ${__cmd})
@@ -338,6 +324,7 @@ function(cdpm_cmd_provision lockfile_path toolchain_file generator)
 
     file(READ "${lockfile_path}" __lock_json)
     cdpm_config_load()
+    cdpm_load_repos()
 
     # Enumerate packages listed in the lockfile.
     string(JSON __pkg_count ERROR_VARIABLE __err LENGTH "${__lock_json}" "packages")
