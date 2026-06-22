@@ -4,15 +4,11 @@ project(cdpm_tests)
 
 enable_testing()
 
-# add_test(NAME "unit.**"
-#     COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_SOURCE_DIR}/unit/**.cmake"
-#     WORKING_DIRECTORY "$<PATH:CMAKE_PATH,NORMALIZE,${CMAKE_SOURCE_DIR}/../>"
-# )
+# Get core root path
+cmake_path(GET CMAKE_CURRENT_SOURCE_DIR PARENT_PATH cdpm_root)
 
 function(add_unit_tests)
     cmake_parse_arguments(arg "" "MODULE" "PASS;FAIL" ${ARGN})
-
-    cmake_path(GET CMAKE_CURRENT_SOURCE_DIR PARENT_PATH cdpm_root)
 
     foreach(case IN LISTS arg_PASS arg_FAIL)
         set(unit_name "unit.${arg_MODULE}.${case}")
@@ -35,6 +31,23 @@ function(add_unit_tests)
             PROPERTIES 
                 WILL_FAIL TRUE
         )
+    endforeach()
+endfunction()
+
+function(add_integration_tests)
+    cmake_parse_arguments(arg "" "" "PASS" ${ARGN})
+
+    foreach(case IN LISTS arg_PASS)
+        set(test_name "integration.${case}")
+        add_test(NAME "${test_name}"
+            COMMAND
+                "${CMAKE_COMMAND}"
+                    -DCMAKE_MODULE_PATH=${cdpm_root}/core
+                    -DCDPM_TEST_HELPERS=${CMAKE_CURRENT_SOURCE_DIR}
+                    -P "${CMAKE_CURRENT_SOURCE_DIR}/integration/${case}.cmake"
+            WORKING_DIRECTORY "${cdpm_root}"
+        )
+        set_tests_properties("${test_name}" PROPERTIES LABELS "integration")
     endforeach()
 endfunction()
 
