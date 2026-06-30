@@ -10,6 +10,7 @@ include_guard(GLOBAL)
 # cdpm_compute_config_hash / cdpm_build_dependency / _cdpm_resolve_store_dir available.
 include(cdpm_config)
 include(cdpm_build)
+include(cdpm_lockfile)
 
 # .. rst:
 # ``_cdpm_ensure_repos_loaded()``
@@ -22,6 +23,8 @@ macro(_cdpm_ensure_repos_loaded)
     if(NOT _cdpm_repos_loaded)
         cdpm_config_load()
         cdpm_load_repos()
+        # Load the lockfile once so the fast-path can consult pinned config hashes.
+        cdpm_read_lockfile()
         set_property(GLOBAL PROPERTY CDPM_PROVIDER_REPOS_LOADED TRUE)
     endif()
     unset(_cdpm_repos_loaded)
@@ -102,10 +105,36 @@ macro(cdpm_provide_dependency method_type)
                 string(TOLOWER "${_cdpm_pkg_name}" _cdpm_pkg_lc)
                 set(_cdpm_install_dir "${_cdpm_store}/${_cdpm_pkg_lc}/${_cdpm_hash}")
 
-                if(NOT EXISTS "${_cdpm_install_dir}/.cdpm_installed")
+                # Lockfile fast-path: when the lockfile pins this package at the freshly recomputed
+                # config hash AND the install sentinel is present, trust it and skip the build. The hash
+                # is always recomputed (it encodes compilers/toolchain/options/patches), so any change to
+                # the build environment moves the hash and forces a rebuild -- the lockfile only ever
+                # saves work, it never overrides a changed configuration.
+                set(_cdpm_locked FALSE)
+                cdpm_lockfile_get("${_cdpm_pkg_name}" _cdpm_lk_found _cdpm_lk_entry)
+                if(_cdpm_lk_found)
+                    string(JSON _cdpm_lk_hash ERROR_VARIABLE _cdpm_lk_err
+                        GET "${_cdpm_lk_entry}" "config_hash")
+                    if(NOT _cdpm_lk_err AND _cdpm_lk_hash STREQUAL "${_cdpm_hash}"
+                       AND EXISTS "${_cdpm_install_dir}/.cdpm_installed")
+                        set(_cdpm_locked TRUE)
+                        message(STATUS "[cdpm] ${_cdpm_pkg_lc}@${_cdpm_version} [${_cdpm_hash}] "
+                            "locked + installed -- skipping resolve/build.")
+                    endif()
+                endif()
+
+                if(NOT _cdpm_locked AND NOT EXISTS "${_cdpm_install_dir}/.cdpm_installed")
                     # TODO(roadmap): resolve transitive dependencies before building (host-tool model).
                     cdpm_build_dependency("${_cdpm_pkg_name}" "${_cdpm_version}"
                         "${_cdpm_hash}" "${_cdpm_meta}")
+                endif()
+
+                # Record/refresh the resolved package in the lockfile (idempotent canonical write).
+                if(NOT _cdpm_locked AND COMMAND cdpm_get_package_source)
+                    cdpm_get_package_source("${_cdpm_pkg_name}" "${_cdpm_meta}" "${_cdpm_version}"
+                        _cdpm_src _cdpm_dev)
+                    cdpm_write_lockfile("${_cdpm_pkg_name}" "${_cdpm_version}" "${_cdpm_hash}"
+                        "${_cdpm_src}" "${_cdpm_dev}")
                 endif()
 
                 # PROPAGATEd out of the block so the trailing find_package() sees it.

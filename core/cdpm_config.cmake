@@ -1272,7 +1272,7 @@ endfunction()
 #   2/3. ``packages.<pkg>.version`` from the effective config (user over project is already resolved by the
 #        layer merge; the two are not distinguished here in v1 - the diagnostic source is reported as
 #        "config")
-#   4. ``cdpm.lock.json`` is consulted by the caller (out of scope here in v1)
+#   4. ``cdpm.lock.json`` pin (the cached ``CDPM_LOCKFILE_JSON`` global, when a lockfile was loaded)
 #   5. ``meta_json.default_version`` from the repository
 #
 # The chosen version must exist in ``meta_json.versions``. ``<requested_version>`` (possibly empty) is the
@@ -1302,6 +1302,21 @@ function(cdpm_resolve_version pkg_name meta_json requested_version out_version o
             if(NOT cfg_err AND NOT cfg_ver STREQUAL "")
                 set(selected "${cfg_ver}")
                 set(source "config (cdpm.json/cdpm_user.json)")
+            endif()
+        endif()
+    endif()
+
+    # --- Step 4: a version pinned by the lockfile (if present and not contradicting 1-3) ----
+    # Read the cached lockfile JSON directly from the global property so this module needs no dependency
+    # on cdpm_lockfile (which itself includes cdpm_config). The property is populated by
+    # cdpm_read_lockfile(); absent when no lockfile was loaded, in which case this step is skipped.
+    if(selected STREQUAL "")
+        get_property(lock GLOBAL PROPERTY CDPM_LOCKFILE_JSON)
+        if(lock)
+            string(JSON lock_ver ERROR_VARIABLE lock_err GET "${lock}" "packages" "${name}" "version")
+            if(NOT lock_err AND NOT lock_ver STREQUAL "")
+                set(selected "${lock_ver}")
+                set(source "cdpm.lock.json")
             endif()
         endif()
     endif()

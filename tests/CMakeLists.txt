@@ -144,6 +144,18 @@ add_unit_tests(MODULE cdpm_build
         build.unimplemented_driver
 )
 
+add_unit_tests(MODULE cdpm_lockfile
+    PASS
+        write.creates_file
+        write.url_source
+        write.dev_override
+        write.idempotent_merge
+        read.missing_file
+        read.roundtrip
+    FAIL
+        read.bad_json
+)
+
 add_integration_tests(
     PASS
         build_cmake_driver
@@ -155,6 +167,7 @@ add_integration_tests(
 
 add_unit_tests(MODULE cdpm_config
     PASS
+        add_registry.cli_command
         build_system.register_and_get
         canonical_json.sorts_keys
         config_blame.cli_command

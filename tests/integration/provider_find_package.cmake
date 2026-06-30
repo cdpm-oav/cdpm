@@ -94,8 +94,27 @@ endif()
 file(GLOB_RECURSE greet_cfg "${greet_slot}/greetConfig.cmake")
 assert_ne("${greet_cfg}" "" "greetConfig.cmake was installed by the provider")
 
+# The provider must have written a lockfile next to the consumer's source with a greet entry whose
+# config_hash matches the installed store slot, and dev:true (the fixture uses a local source_override).
+set(lockfile "${consumer}/cdpm.lock.json")
+set(lock_exists FALSE)
+if(EXISTS "${lockfile}")
+    set(lock_exists TRUE)
+endif()
+assert_true("${lock_exists}" "provider wrote cdpm.lock.json")
+
+file(READ "${lockfile}" lock_json)
+string(JSON greet_entry GET "${lock_json}" "packages" "greet")
+assert_json_member("${greet_entry}" "version" "1.0.0" "lockfile pins greet version")
+assert_json_member("${greet_entry}" "dev" "ON" "lockfile marks the source_override build as dev")
+
+cmake_path(GET greet_slot FILENAME slot_hash)
+assert_json_member("${greet_entry}" "config_hash" "${slot_hash}"
+    "lockfile config_hash matches the installed store slot")
+
 # ---------------------------------------------------------------------------
-# Case 2: re-configure is idempotent (sentinel skip -- no rebuild).
+# Case 2: re-configure is idempotent (sentinel skip -- no rebuild). With the lockfile now present
+# and the sentinel in place, the provider takes the lockfile fast-path on this run.
 # ---------------------------------------------------------------------------
 file(TIMESTAMP "${greet_slot}/.cdpm_installed" ts1)
 execute_process(

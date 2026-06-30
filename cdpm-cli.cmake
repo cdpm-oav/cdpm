@@ -49,6 +49,11 @@ if(EXISTS "${__CDPM_BUILD_MODULE}")
     include("${__CDPM_BUILD_MODULE}")
 endif()
 
+set(__CDPM_LOCKFILE_MODULE "${__CDPM_ROOT}/core/cdpm_lockfile.cmake")
+if(EXISTS "${__CDPM_LOCKFILE_MODULE}")
+    include("${__CDPM_LOCKFILE_MODULE}")
+endif()
+
 # ---------------------------------------------------------------------------
 # Parse CLI arguments from CMAKE_ARGV<N>.
 #
@@ -255,14 +260,35 @@ elseif(__CDPM_COMMAND STREQUAL "provision")
 
     cdpm_cmd_provision("${__CDPM_LOCKFILE}" "${CDPM_EFFECTIVE_TOOLCHAIN}" "${CDPM_EFFECTIVE_GENERATOR}")
 
-# ---- add-registry <path> --------------------------------------------------
+# ---- add-registry <path> [--scope machine|project] ------------------------
 elseif(__CDPM_COMMAND STREQUAL "add-registry")
-    if(__CDPM_NARGS LESS 2)
+    set(__CDPM_REG_PATH "")
+    set(__CDPM_REG_SCOPE "machine")
+
+    # Parse the positional <path> and the optional --scope <machine|project> flag.
+    set(__CDPM_REG_IDX 1)
+    while(__CDPM_REG_IDX LESS "${__CDPM_NARGS}")
+        list(GET CDPM_CLI_ARGS ${__CDPM_REG_IDX} __CDPM_REG_TOKEN)
+        if(__CDPM_REG_TOKEN STREQUAL "--scope")
+            math(EXPR __CDPM_REG_NEXT "${__CDPM_REG_IDX} + 1")
+            if(__CDPM_REG_NEXT LESS "${__CDPM_NARGS}")
+                list(GET CDPM_CLI_ARGS ${__CDPM_REG_NEXT} __CDPM_REG_SCOPE)
+                math(EXPR __CDPM_REG_IDX "${__CDPM_REG_IDX} + 2")
+            else()
+                message(FATAL_ERROR "[cdpm] '--scope' requires a value (machine|project).")
+            endif()
+        else()
+            set(__CDPM_REG_PATH "${__CDPM_REG_TOKEN}")
+            math(EXPR __CDPM_REG_IDX "${__CDPM_REG_IDX} + 1")
+        endif()
+    endwhile()
+
+    if(__CDPM_REG_PATH STREQUAL "")
         message(FATAL_ERROR "[cdpm] 'add-registry' requires a registry path.\n"
-                            "Usage: cmake -P cdpm-cli.cmake -- add-registry <path/to/packages.json>")
+                            "Usage: cmake -P cdpm-cli.cmake -- add-registry <path/to/packages.json> "
+                            "[--scope machine|project]")
     endif()
-    list(GET CDPM_CLI_ARGS 1 __CDPM_REG_PATH)
-    cdpm_cmd_add_registry("${__CDPM_REG_PATH}")
+    cdpm_cmd_add_registry("${__CDPM_REG_PATH}" "${__CDPM_REG_SCOPE}")
 
 # ---- config <subcommand> --------------------------------------------------
 elseif(__CDPM_COMMAND STREQUAL "config")

@@ -8,6 +8,8 @@ include(cdpm_version)
 # Provides the single _cdpm_resolve_store_dir(<out>) contract, cdpm_config_load and cdpm_load_repos.
 # (cdpm_config does not include this module, so there is no include cycle.)
 include(cdpm_config)
+# Lockfile read/write (cdpm_read_lockfile / cdpm_write_lockfile / cdpm_lockfile_get).
+include(cdpm_lockfile)
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -67,6 +69,30 @@ function(_cdpm_list_installed_packages out_list)
     return(PROPAGATE ${out_list})
 endfunction()
 
+# :brief: Records a resolved package into the lockfile (idempotent).
+#         Resolves the normalized source (with its dev flag) from the package metadata, then writes the
+#         entry via cdpm_write_lockfile. Loads the lockfile from lockfile_path on demand. Safe to call on
+#         both fresh builds and sentinel-skipped (already-installed) runs.
+# :param pkg_name:      package name
+# :param pkg_version:   resolved version
+# :param config_hash:   resolved config hash
+# :param meta_json:     registry metadata for the package
+# :param lockfile_path: lockfile path (empty = default ${CMAKE_SOURCE_DIR}/cdpm.lock.json)
+function(_cdpm_record_package_lock pkg_name pkg_version config_hash meta_json lockfile_path)
+    if(NOT COMMAND cdpm_write_lockfile OR NOT COMMAND cdpm_get_package_source)
+        return()
+    endif()
+
+    cdpm_get_package_source("${pkg_name}" "${meta_json}" "${pkg_version}" __src __dev)
+
+    if(lockfile_path STREQUAL "")
+        cdpm_read_lockfile()
+    else()
+        cdpm_read_lockfile(PATH "${lockfile_path}")
+    endif()
+    cdpm_write_lockfile("${pkg_name}" "${pkg_version}" "${config_hash}" "${__src}" "${__dev}")
+endfunction()
+
 # ---------------------------------------------------------------------------
 # Public commands
 # ---------------------------------------------------------------------------
@@ -97,12 +123,12 @@ Commands:
   install <pkg> [<version>]        Build and install a package
   clean <pkg> [<hash>]             Remove installed package(s)
   provision [--lockfile <path>]    Install all packages from a lockfile
-  add-registry <path>              Register an additional packages.json path
+  add-registry <path> [--scope machine|project]
+                                   Persist a packages.json registry into a config layer
   config blame [<path>]            Show which config layer last set each value
 
 Environment / cache variables:
   CDPM_STORE_DIR                   Override default package store location
-  CDPM_REGISTRY_FILES              Semicolon-separated list of registry paths
   CDPM_ALLOW_SYSTEM_PACKAGES       Fall back to system packages when ON
   CDPM_TOOLSET                     Optional toolset tag included in config hash
   CMAKE_TOOLCHAIN_FILE             Toolchain file fallback (see --toolchain above)
@@ -259,10 +285,13 @@ function(cdpm_cmd_install pkg_name pkg_version toolchain_file generator)
 
     if(EXISTS "${__install_dir}/.cdpm_installed")
         message(STATUS "[cdpm] ${pkg_name}@${__resolved_ver} [${__hash}] already installed -- skipping.")
+        # Still record the (already-installed) package in the lockfile so the resolved graph is pinned.
+        _cdpm_record_package_lock("${pkg_name}" "${__resolved_ver}" "${__hash}" "${__meta_json}" "")
         return()
     endif()
 
     cdpm_build_dependency("${pkg_name}" "${__resolved_ver}" "${__hash}" "${__meta_json}")
+    _cdpm_record_package_lock("${pkg_name}" "${__resolved_ver}" "${__hash}" "${__meta_json}" "")
     message(STATUS "[cdpm] Done: ${pkg_name}@${__resolved_ver} -> ${__install_dir}")
 endfunction()
 
@@ -316,22 +345,34 @@ function(cdpm_cmd_provision lockfile_path toolchain_file generator)
 
     foreach(__cmd IN ITEMS cdpm_config_load cdpm_load_repos cdpm_find_in_repo
                            cdpm_resolve_version cdpm_compute_config_hash
-                           cdpm_build_dependency)
+                           cdpm_build_dependency cdpm_read_lockfile cdpm_lockfile_get)
         if(NOT COMMAND ${__cmd})
             message(FATAL_ERROR "[cdpm] Required function '${__cmd}' is not available.")
         endif()
     endforeach()
 
-    file(READ "${lockfile_path}" __lock_json)
+    # Propagate the toolchain/generator so the recomputed config hash matches the install path.
+    if(NOT toolchain_file STREQUAL "")
+        set(CMAKE_TOOLCHAIN_FILE "${toolchain_file}")
+    endif()
+    if(NOT generator STREQUAL "")
+        set(CMAKE_GENERATOR "${generator}")
+    endif()
+
+    # The lockfile is the authoritative input here: load it (so step-4 version resolution and the
+    # fast-path consult it) and enumerate its packages.
+    cdpm_read_lockfile(PATH "${lockfile_path}")
     cdpm_config_load()
     cdpm_load_repos()
 
-    # Enumerate packages listed in the lockfile.
+    get_property(__lock_json GLOBAL PROPERTY CDPM_LOCKFILE_JSON)
     string(JSON __pkg_count ERROR_VARIABLE __err LENGTH "${__lock_json}" "packages")
     if(__err OR __pkg_count EQUAL 0)
         message(STATUS "[cdpm] Lockfile contains no packages.")
         return()
     endif()
+
+    _cdpm_resolve_store_dir(__store)
 
     math(EXPR __last "${__pkg_count} - 1")
     foreach(__i RANGE 0 ${__last})
@@ -341,21 +382,50 @@ function(cdpm_cmd_provision lockfile_path toolchain_file generator)
             continue()
         endif()
 
-        string(JSON __locked_ver ERROR_VARIABLE __err GET "${__lock_json}" "packages" "${__pkg_name}" "version")
-        if(__err)
-            set(__locked_ver "")
+        cdpm_find_in_repo("${__pkg_name}" __found __meta_json)
+        if(NOT __found)
+            message(WARNING "[cdpm] provision: '${__pkg_name}' is not in any loaded repository -- skipping.")
+            continue()
         endif()
 
-        message(STATUS "[cdpm] Provisioning ${__pkg_name}@${__locked_ver} ...")
-        cdpm_cmd_install("${__pkg_name}" "${__locked_ver}" "${toolchain_file}" "${generator}")
+        cdpm_resolve_version("${__pkg_name}" "${__meta_json}" "" __resolved_ver __compat_ver)
+        cdpm_compute_config_hash("${__pkg_name}" "${__resolved_ver}" "${__meta_json}" __hash)
+        set(__install_dir "${__store}/${__pkg_name}/${__hash}")
+
+        # Fast-path: lockfile pins this hash AND the sentinel exists -> nothing to do.
+        cdpm_lockfile_get("${__pkg_name}" __lk_found __lk_entry)
+        set(__locked FALSE)
+        if(__lk_found)
+            string(JSON __lk_hash ERROR_VARIABLE __lk_err GET "${__lk_entry}" "config_hash")
+            if(NOT __lk_err AND __lk_hash STREQUAL "${__hash}"
+               AND EXISTS "${__install_dir}/.cdpm_installed")
+                set(__locked TRUE)
+            endif()
+        endif()
+
+        if(__locked)
+            message(STATUS "[cdpm] ${__pkg_name}@${__resolved_ver} [${__hash}] locked + installed -- skipping.")
+            continue()
+        endif()
+
+        message(STATUS "[cdpm] Provisioning ${__pkg_name}@${__resolved_ver} [${__hash}] ...")
+        cdpm_build_dependency("${__pkg_name}" "${__resolved_ver}" "${__hash}" "${__meta_json}")
+        _cdpm_record_package_lock("${__pkg_name}" "${__resolved_ver}" "${__hash}" "${__meta_json}"
+            "${lockfile_path}")
     endforeach()
 
     message(STATUS "[cdpm] Provision complete.")
 endfunction()
 
-# :brief: Appends a registry file path to CDPM_REGISTRY_FILES cache variable.
-# :param registry_path: absolute or relative path to a packages.json file
-function(cdpm_cmd_add_registry registry_path)
+# :brief: Persists a ``kind: file`` registry entry into a config layer that cdpm_config_load() reads.
+#         Appends ``{ "kind": "file", "path": "<abs>" }`` to the target file's ``repos[]`` array so the
+#         registry survives across CLI invocations (cmake -P script mode keeps no cache) and is actually
+#         consumed by cdpm_load_repos(). The registry path is stored absolute, which is CWD-independent.
+# :param registry_path: path to a packages.json file (resolved to an absolute path)
+# :param scope:         'machine' (~/.cdpm/config.json) or 'project' (${CMAKE_SOURCE_DIR}/cdpm.json).
+#                       The target file mirrors cdpm_config_load()'s layer-path resolution, so the
+#                       CDPM_MACHINE_CONFIG / CDPM_PROJECT_CONFIG overrides apply identically.
+function(cdpm_cmd_add_registry registry_path scope)
     _cdpm_print_banner()
 
     if(registry_path STREQUAL "")
@@ -366,25 +436,75 @@ function(cdpm_cmd_add_registry registry_path)
         message(WARNING "[cdpm] Registry file does not exist (yet): ${registry_path}")
     endif()
 
-    cmake_path(ABSOLUTE_PATH registry_path NORMALIZE OUTPUT_VARIABLE __abs_path)
+    cmake_path(ABSOLUTE_PATH registry_path NORMALIZE OUTPUT_VARIABLE abs_path)
 
-    if(DEFINED CDPM_REGISTRY_FILES)
-        list(FIND CDPM_REGISTRY_FILES "${__abs_path}" __idx)
-        if(NOT __idx EQUAL -1)
-            message(STATUS "[cdpm] Registry already registered: ${__abs_path}")
-            return()
+    # Resolve the target config file, mirroring cdpm_config_load()'s layer-path resolution so we write
+    # exactly the file the loader reads (and so the *_CONFIG cache overrides make this testable).
+    if(scope STREQUAL "machine")
+        if(DEFINED CDPM_MACHINE_CONFIG)
+            set(target "${CDPM_MACHINE_CONFIG}")
+        else()
+            set(target "$ENV{HOME}/.cdpm/config.json")
         endif()
-        list(APPEND CDPM_REGISTRY_FILES "${__abs_path}")
+    elseif(scope STREQUAL "project")
+        if(DEFINED CDPM_PROJECT_CONFIG)
+            set(target "${CDPM_PROJECT_CONFIG}")
+        else()
+            set(target "${CMAKE_SOURCE_DIR}/cdpm.json")
+        endif()
     else()
-        set(CDPM_REGISTRY_FILES "${__abs_path}")
+        message(FATAL_ERROR "[cdpm] add-registry: unknown scope '${scope}' (expected machine|project).")
     endif()
 
-    set(CDPM_REGISTRY_FILES "${CDPM_REGISTRY_FILES}"
-        CACHE STRING "Semicolon-separated list of cdpm registry (packages.json) paths" FORCE
-    )
+    # Load the existing config (must be a JSON object) or seed a fresh schema-1 document.
+    if(EXISTS "${target}")
+        file(READ "${target}" config_json)
+        string(JSON config_type ERROR_VARIABLE type_err TYPE "${config_json}")
+        if(type_err OR NOT config_type STREQUAL "OBJECT")
+            message(FATAL_ERROR "[cdpm] add-registry: config file '${target}' is not a JSON object.")
+        endif()
+    else()
+        set(config_json [=[{"cdpm_schema":1,"repos":[]}]=])
+    endif()
 
-    message(STATUS "[cdpm] Registry added: ${__abs_path}")
-    message(STATUS "[cdpm] CDPM_REGISTRY_FILES = ${CDPM_REGISTRY_FILES}")
+    # Ensure a repos[] array exists to append into.
+    string(JSON repos ERROR_VARIABLE repos_err GET "${config_json}" "repos")
+    if(repos_err)
+        set(repos "[]")
+    endif()
+
+    # Dedup: a file entry pointing at the same absolute path is a no-op.
+    string(JSON repos_len ERROR_VARIABLE len_err LENGTH "${repos}")
+    if(NOT len_err AND repos_len GREATER 0)
+        math(EXPR repos_last "${repos_len} - 1")
+        foreach(i RANGE 0 ${repos_last})
+            string(JSON entry GET "${repos}" ${i})
+            string(JSON entry_kind ERROR_VARIABLE k_err GET "${entry}" "kind")
+            string(JSON entry_path ERROR_VARIABLE p_err GET "${entry}" "path")
+            if(NOT k_err AND NOT p_err AND entry_kind STREQUAL "file" AND entry_path STREQUAL "${abs_path}")
+                message(STATUS "[cdpm] Registry already present in ${target}: ${abs_path}")
+                return()
+            endif()
+        endforeach()
+    else()
+        set(repos_len 0)
+    endif()
+
+    # Build the new entry { "kind": "file", "path": "<abs>" } with proper JSON escaping.
+    set(new_entry "{}")
+    _cdpm_json_set_safe("${new_entry}" "kind" "file" "STRING" new_entry)
+    _cdpm_json_set_safe("${new_entry}" "path" "${abs_path}" "STRING" new_entry)
+
+    # Append the entry and write the updated repos[] back into the config document.
+    string(JSON repos SET "${repos}" ${repos_len} "${new_entry}")
+    string(JSON config_json SET "${config_json}" "repos" "${repos}")
+
+    cmake_path(GET target PARENT_PATH target_dir)
+    file(MAKE_DIRECTORY "${target_dir}")
+    file(WRITE "${target}" "${config_json}\n")
+
+    message(STATUS "[cdpm] Registry added to ${scope} config: ${target}")
+    message(STATUS "[cdpm] repos[] entry: { kind: file, path: ${abs_path} }")
 endfunction()
 
 # :brief: Reports which config layer last set each tracked path (CLI wrapper over cdpm_config_blame).
