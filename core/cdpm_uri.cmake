@@ -3,6 +3,12 @@
 include_guard(GLOBAL)
 
 cmake_policy(SET CMP0140 NEW)
+# Modules carry no cmake_minimum_required, so set the policies they rely on explicitly to stay correct
+# when included from a bare script under the 3.25 baseline:
+#   CMP0057 -- if(... IN_LIST ...) operator;
+#   CMP0007 -- list() commands do not silently drop empty elements (index math stays correct).
+cmake_policy(SET CMP0057 NEW)
+cmake_policy(SET CMP0007 NEW)
 
 include(cdpm_utils)
 

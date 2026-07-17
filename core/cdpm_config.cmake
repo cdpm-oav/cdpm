@@ -3,6 +3,12 @@
 include_guard(GLOBAL)
 
 cmake_policy(SET CMP0140 NEW)
+# Modules carry no cmake_minimum_required, so set the policies they rely on explicitly to stay correct
+# when included from a bare script under the 3.25 baseline:
+#   CMP0057 -- if(... IN_LIST ...) operator;
+#   CMP0007 -- list() commands do not silently drop empty elements (index math stays correct).
+cmake_policy(SET CMP0057 NEW)
+cmake_policy(SET CMP0007 NEW)
 
 include(cdpm_utils) # JSON iteration helpers (_cdpm_json_foreach / _cdpm_json_get).
 include(cdpm_uri) # URI parsing/validation (cdpm_parse_uri) - used by repo source validation.
@@ -15,7 +21,7 @@ include(cdpm_verange) # Version-range primitive (cdpm_parse_version_range) - use
 # ``string(JSON ... GET ...)`` while keeping it valid JSON.
 #
 # ``string(JSON ... GET ...)`` unwraps scalars: strings lose their quotes and booleans come back as
-# ``ON``/``OFF`` on the 3.26 baseline. Feeding that raw text back into ``SET`` fails (a bare ``OFF`` or an
+# ``ON``/``OFF`` on the 3.25 baseline. Feeding that raw text back into ``SET`` fails (a bare ``OFF`` or an
 # unquoted string is not valid JSON), so this wrapper re-wraps by type: strings are JSON-quoted, booleans
 # normalized to ``true``/``false``, objects/arrays/numbers/null inserted as-is.
 function(_cdpm_json_set_safe json key value value_type out_json)
@@ -140,7 +146,7 @@ endfunction()
 # Produces a canonical form of ``json`` for stable hashing: object keys are sorted recursively and
 # booleans are normalized to the literals ``true``/``false``.
 #
-# Rationale: on the CMake 3.26 baseline ``string(JSON ... GET ...)`` returns booleans as ``ON``/``OFF``, so
+# Rationale: on the CMake 3.25 baseline ``string(JSON ... GET ...)`` returns booleans as ``ON``/``OFF``, so
 # a naive get-then-set round-trip could turn ``"x": true`` into ``"x": ON`` and change ``config_hash`` for
 # an unchanged config. This function therefore re-emits booleans from their ``TYPE``, never from the raw
 # ``GET`` text. Whitespace minimization is left to the caller's hash input (string(JSON SET) already yields
@@ -1674,7 +1680,7 @@ endfunction()
 #    set(CDPM_USER_JSON "{\"myorg.fips\":\"on\"}")
 #
 # Keys are normalized via :cmake:command:`_cdpm_user_key_to_cmake`. ``CDPM_USER_JSON`` is assembled by hand
-# with quote/backslash escaping because ``STRING_ENCODE`` is 4.3-only and the baseline is 3.26. Values are
+# with quote/backslash escaping because ``STRING_ENCODE`` is 4.3-only and the baseline is 3.25. Values are
 # emitted verbatim (the user map carries already-resolved scalar ``value`` payloads).
 #
 # ``TRACKED_HASH`` optionally returns the SHA-256 of the canonical *tracked* map (the same object that

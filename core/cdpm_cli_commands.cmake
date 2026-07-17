@@ -1,8 +1,17 @@
 # cdpm_cli_commands.cmake
 # Implementation of all cdpm CLI commands. Included by cdpm-cli.cmake and potentially
 # by the future cmake provision hook. No platform-specific shell commands -- CMake API only.
+#
+# Modules declare no cmake_minimum_required; the required version is asserted once at the public entry
+# points (cdpm.cmake / cdpm-cli.cmake, both 3.25).
 
-cmake_minimum_required(VERSION 3.26)
+include_guard(GLOBAL)
+
+cmake_policy(SET CMP0140 NEW)
+# Set the policies this module relies on explicitly (no cmake_minimum_required in modules) so it stays
+# correct when included from a bare script under the 3.25 baseline:
+#   CMP0007 -- list() commands do not silently drop empty elements (index math stays correct).
+cmake_policy(SET CMP0007 NEW)
 
 include(cdpm_version)
 # Provides the single _cdpm_resolve_store_dir(<out>) contract, cdpm_config_load and cdpm_load_repos.

@@ -60,7 +60,7 @@ endfunction()
 
 # .. rst:
 # ``assert_json_member(<json> <key> <expected> <what>)`` - a top-level member equals a scalar 
-# (uses GET, which unwraps scalars on the 3.26 baseline).
+# (uses GET, which unwraps scalars on the 3.25 baseline).
 function(assert_json_member json key expected what)
     string(JSON val ERROR_VARIABLE err GET "${json}" "${key}")
     if(err)

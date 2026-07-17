@@ -153,7 +153,7 @@ function(cdpm_bs_cmake_build ctx_json)
     # ---- Assemble the mini-project ----------------------------------------------
     list(JOIN download_lines "\n" download_block)
 
-    set(ml "cmake_minimum_required(VERSION 3.26)")
+    set(ml "cmake_minimum_required(VERSION 3.25)")
     string(APPEND ml "\nproject(cdpm_ep NONE)")
     string(APPEND ml "\ninclude(ExternalProject)")
     string(APPEND ml "\nExternalProject_Add(cdpm_pkg")

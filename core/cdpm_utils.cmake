@@ -3,6 +3,12 @@
 include_guard(GLOBAL)
 
 cmake_policy(SET CMP0140 NEW)
+# Modules carry no cmake_minimum_required, so set the policies they rely on explicitly to stay correct
+# when included from a bare script under the 3.25 baseline:
+#   CMP0057 -- if(... IN_LIST ...) operator;
+#   CMP0007 -- list() commands do not silently drop empty elements (index math stays correct).
+cmake_policy(SET CMP0057 NEW)
+cmake_policy(SET CMP0007 NEW)
 
 # .. rst:
 # ``_cdpm_json_foreach(<json> <out_keys>)``
@@ -37,7 +43,7 @@ endmacro()
 # ``<out_value>`` is empty when the key is absent. 
 # Uses ``ERROR_VARIABLE`` so a missing key never aborts configure.
 #
-# Note: ``string(JSON ... GET ...)`` returns booleans as ``ON``/``OFF`` on the 3.26 baseline, not ``true``/``false`` — 
+# Note: ``string(JSON ... GET ...)`` returns booleans as ``ON``/``OFF`` on the 3.25 baseline, not ``true``/``false`` — 
 # callers that hash values must normalize via ``<out_type>``.
 function(_cdpm_json_get json key out_value out_type)
     string(JSON value_type ERROR_VARIABLE type_err TYPE "${json}" "${key}")

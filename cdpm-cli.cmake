@@ -12,7 +12,7 @@
 #   CMAKE_ARGV4 = [--toolchain]   (optional global option or command)
 #   CMAKE_ARGV5 = ...
 
-cmake_minimum_required(VERSION 3.26)
+cmake_minimum_required(VERSION 3.25)
 
 # ---------------------------------------------------------------------------
 # Locate the cdpm root directory (directory containing this script).
