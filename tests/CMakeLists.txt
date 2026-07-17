@@ -156,10 +156,19 @@ add_unit_tests(MODULE cdpm_lockfile
         read.bad_json
 )
 
+add_unit_tests(MODULE cdpm_cps
+    PASS
+        generate.interface_basic
+        generate.archive_location
+        generate.compat_requires_platform
+        generate.disabled_noop
+)
+
 add_integration_tests(
     PASS
         build_cmake_driver
         build_cmake_driver_patch
+        build_cmake_driver_cps
         provider_find_package
     NETWORK
         provider_fmt_e2e

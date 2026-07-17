@@ -10,6 +10,7 @@ include(cdpm_verange)
 include(cdpm_config)
 include(cdpm_toolchain)
 include(cdpm_hash)
+include(cdpm_cps)
 
 # cdpm root (parent of core/) captured at include time. Driver module paths from the
 # registry are relative to this root (e.g. core/bs/cdpm_bs_cmake.cmake).
