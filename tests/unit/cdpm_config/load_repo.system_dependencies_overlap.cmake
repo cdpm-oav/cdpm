@@ -1,0 +1,5 @@
+include(cdpm_config)
+set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/system_overlap")
+file(MAKE_DIRECTORY "${tmp}")
+file(WRITE "${tmp}/packages.json" [[{"repo_schema":1,"packages":{"x":{"source":{"type":"local","url":"."},"dependencies":{"foo":{}},"system_dependencies":{"Foo":{"mode":"CONFIG","identity_targets":["Foo::Foo"]}},"versions":{"1":{}}}}}]])
+cdpm_load_repo("${tmp}/packages.json")

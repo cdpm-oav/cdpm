@@ -13,6 +13,7 @@ cmake_policy(SET CMP0007 NEW)
 include(cdpm_utils) # JSON iteration helpers (_cdpm_json_foreach / _cdpm_json_get).
 include(cdpm_uri) # URI parsing/validation (cdpm_parse_uri) - used by repo source validation.
 include(cdpm_verange) # Version-range primitive (cdpm_parse_version_range) - used to validate patch/option ranges.
+include(cdpm_context)
 
 # .. rst:
 # ``_cdpm_json_set_safe(<json> <key> <value> <value_type> <out_json>)``
@@ -425,8 +426,8 @@ endfunction()
 #
 # Path overrides (cache variables; empty string disables the layer):
 #   CDPM_MACHINE_CONFIG  default: $ENV{HOME}/.cdpm/config.json
-#   CDPM_PROJECT_CONFIG  default: ${CMAKE_SOURCE_DIR}/cdpm.json
-#   CDPM_USER_CONFIG     default: ${CMAKE_SOURCE_DIR}/cdpm_user.json
+#   CDPM_PROJECT_CONFIG  default: <project>/cdpm.json
+#   CDPM_USER_CONFIG     default: <project>/cdpm_user.json
 #
 # Results (GLOBAL properties):
 #   CDPM_CONFIG_LOADED     guard flag
@@ -442,18 +443,19 @@ function(cdpm_config_load)
     endif()
 
     # Resolve layer paths (cache variables win; otherwise conventional defaults).
+    _cdpm_resolve_project_dir(project_dir)
     if(NOT DEFINED CDPM_MACHINE_CONFIG)
         set(machine_config "$ENV{HOME}/.cdpm/config.json")
     else()
         set(machine_config "${CDPM_MACHINE_CONFIG}")
     endif()
     if(NOT DEFINED CDPM_PROJECT_CONFIG)
-        set(project_config "${CMAKE_SOURCE_DIR}/cdpm.json")
+        set(project_config "${project_dir}/cdpm.json")
     else()
         set(project_config "${CDPM_PROJECT_CONFIG}")
     endif()
     if(NOT DEFINED CDPM_USER_CONFIG)
-        set(user_config "${CMAKE_SOURCE_DIR}/cdpm_user.json")
+        set(user_config "${project_dir}/cdpm_user.json")
     else()
         set(user_config "${CDPM_USER_CONFIG}")
     endif()
@@ -845,6 +847,285 @@ function(_cdpm_validate_repo_version_options pkg_name pkg_json)
             message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': version_options[${i}] requires an "
                 "'options' object.")
         endif()
+        string(JSON entry_opts GET "${entry}" options)
+        _cdpm_validate_option_keys("${entry_opts}" "repo package '${pkg_name}' version_options[${i}]")
+    endforeach()
+endfunction()
+
+# Validates keys that will become CMake cache variable names in a build driver.
+function(_cdpm_validate_option_keys options context)
+    string(JSON options_type ERROR_VARIABLE options_err TYPE "${options}")
+    if(options_err OR NOT options_type STREQUAL "OBJECT")
+        message(FATAL_ERROR "[cdpm] ${context}: options must be an object.")
+    endif()
+    _cdpm_json_foreach("${options}" option_keys)
+    foreach(option_key IN LISTS option_keys)
+        if(NOT option_key MATCHES [[^[A-Za-z_][A-Za-z0-9_]*$]])
+            message(FATAL_ERROR "[cdpm] ${context}: option key '${option_key}' is not a safe CMake cache "
+                "variable name.")
+        endif()
+    endforeach()
+endfunction()
+
+# .. rst:
+# ``_cdpm_normalize_system_dependencies(<pkg_name> <json> <context> <out_json>)``
+function(_cdpm_normalize_system_dependencies pkg_name json context out_json)
+    string(JSON map_type ERROR_VARIABLE map_err TYPE "${json}")
+    if(map_err OR NOT map_type STREQUAL "OBJECT")
+        message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context} must be an object map.")
+    endif()
+    set(result "{}")
+    string(JSON dependency_count LENGTH "${json}")
+    if(dependency_count EQUAL 0)
+        set(${out_json} "{}")
+        return(PROPAGATE ${out_json})
+    endif()
+    math(EXPR dependency_last "${dependency_count} - 1")
+    foreach(dependency_index RANGE 0 ${dependency_last})
+        string(JSON dependency_name MEMBER "${json}" ${dependency_index})
+        if(dependency_name STREQUAL "" OR NOT dependency_name MATCHES [[^[A-Za-z0-9_.+-]+$]])
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context} contains unsafe package name "
+                "'${dependency_name}'.")
+        endif()
+        string(JSON spec_type TYPE "${json}" "${dependency_name}")
+        if(NOT spec_type STREQUAL "OBJECT")
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name} must be an object.")
+        endif()
+        string(JSON spec GET "${json}" "${dependency_name}")
+        _cdpm_json_foreach("${spec}" fields)
+        foreach(field IN LISTS fields)
+            if(NOT field MATCHES [[^(mode|version|components|identity_targets|identity_paths)$]])
+                message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name} has unknown "
+                    "field '${field}'.")
+            endif()
+        endforeach()
+
+        string(JSON mode_type ERROR_VARIABLE mode_type_err TYPE "${spec}" mode)
+        string(JSON mode ERROR_VARIABLE mode_err GET "${spec}" mode)
+        if(mode_err OR mode_type_err OR NOT mode_type STREQUAL "STRING")
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name}.mode must be "
+                "CONFIG or MODULE.")
+        endif()
+        string(TOUPPER "${mode}" mode)
+        if(NOT mode MATCHES [[^(CONFIG|MODULE)$]])
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name}.mode must be "
+                "CONFIG or MODULE.")
+        endif()
+        set(normalized "{}")
+        _cdpm_json_set_safe("${normalized}" mode "${mode}" STRING normalized)
+
+        string(JSON version ERROR_VARIABLE version_err GET "${spec}" version)
+        if(NOT version_err)
+            string(JSON version_type TYPE "${spec}" version)
+            if(NOT version_type STREQUAL "STRING" OR version STREQUAL "")
+                message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name}.version must "
+                    "be a non-empty string.")
+            endif()
+            _cdpm_json_set_safe("${normalized}" version "${version}" STRING normalized)
+        endif()
+
+        foreach(array_field IN ITEMS components identity_targets identity_paths)
+            string(JSON array ERROR_VARIABLE array_err GET "${spec}" "${array_field}")
+            if(array_err)
+                if(array_field STREQUAL "identity_targets")
+                    message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name}."
+                        "identity_targets is required.")
+                endif()
+                continue()
+            endif()
+            string(JSON array_type TYPE "${spec}" "${array_field}")
+            if(NOT array_type STREQUAL "ARRAY")
+                message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name}."
+                    "${array_field} must be an array of unique non-empty strings.")
+            endif()
+            string(JSON array_length LENGTH "${array}")
+            if(array_field MATCHES [[^(identity_targets|identity_paths)$]] AND array_length EQUAL 0)
+                message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name}."
+                    "${array_field} must not be empty.")
+            endif()
+            set(seen "")
+            if(array_length GREATER 0)
+                math(EXPR array_last "${array_length} - 1")
+                foreach(i RANGE 0 ${array_last})
+                    string(JSON item_type TYPE "${array}" ${i})
+                    string(JSON item GET "${array}" ${i})
+                    if(NOT item_type STREQUAL "STRING" OR item STREQUAL "" OR item IN_LIST seen)
+                        message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name}."
+                            "${array_field} must contain unique non-empty strings.")
+                    endif()
+                    if(array_field STREQUAL "identity_paths")
+                        if(NOT item MATCHES [[^[A-Za-z0-9_.+@/~-]+$]]
+                                OR item MATCHES [[(^/|^[A-Za-z]:|(^|/)\.\.(/|$))]])
+                            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}."
+                                "${dependency_name}.identity_paths must contain safe relative paths without '..'.")
+                        endif()
+                        cmake_path(NORMAL_PATH item OUTPUT_VARIABLE item)
+                        if(item IN_LIST seen)
+                            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}."
+                                "${dependency_name}.identity_paths must be unique after normalization.")
+                        endif()
+                        _cdpm_json_set_safe("${array}" ${i} "${item}" STRING array)
+                    endif()
+                    list(APPEND seen "${item}")
+                endforeach()
+            endif()
+            string(JSON normalized SET "${normalized}" "${array_field}" "${array}")
+        endforeach()
+        string(JSON result SET "${result}" "${dependency_name}" "${normalized}")
+    endforeach()
+    cdpm_canonical_json("${result}" result)
+    set(${out_json} "${result}")
+    return(PROPAGATE ${out_json})
+endfunction()
+
+# .. rst:
+# ``_cdpm_normalize_managed_dependencies(<pkg_name> <json> <context> <out_json>)``
+function(_cdpm_normalize_managed_dependencies pkg_name json context out_json)
+    string(JSON map_type ERROR_VARIABLE map_err TYPE "${json}")
+    if(map_err OR NOT map_type STREQUAL "OBJECT")
+        message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context} must be an object map.")
+    endif()
+
+    set(result "{}")
+    _cdpm_json_foreach("${json}" dependency_names)
+    foreach(dependency_name IN LISTS dependency_names)
+        if(dependency_name STREQUAL "" OR NOT dependency_name MATCHES [[^[A-Za-z0-9_.+-]+$]])
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context} contains unsafe package name "
+                "'${dependency_name}'.")
+        endif()
+        string(JSON spec_type TYPE "${json}" "${dependency_name}")
+        if(NOT spec_type STREQUAL "OBJECT")
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name} must be an object.")
+        endif()
+        string(JSON spec GET "${json}" "${dependency_name}")
+        _cdpm_json_foreach("${spec}" fields)
+        foreach(field IN LISTS fields)
+            if(NOT field MATCHES [[^(version|components)$]])
+                message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name} has unknown "
+                    "field '${field}'.")
+            endif()
+        endforeach()
+
+        set(normalized "{}")
+        string(JSON version ERROR_VARIABLE version_err GET "${spec}" version)
+        if(NOT version_err)
+            string(JSON version_type TYPE "${spec}" version)
+            if(NOT version_type STREQUAL "STRING" OR version STREQUAL "")
+                message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name}.version must "
+                    "be a non-empty string.")
+            endif()
+            _cdpm_json_set_safe("${normalized}" version "${version}" STRING normalized)
+        endif()
+
+        string(JSON components ERROR_VARIABLE components_err GET "${spec}" components)
+        if(NOT components_err)
+            string(JSON components_type TYPE "${spec}" components)
+            if(NOT components_type STREQUAL "ARRAY")
+                message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name}.components "
+                    "must be an array of unique non-empty strings.")
+            endif()
+            set(seen "")
+            string(JSON component_count LENGTH "${components}")
+            if(component_count GREATER 0)
+                math(EXPR component_last "${component_count} - 1")
+                foreach(i RANGE 0 ${component_last})
+                    string(JSON component_type TYPE "${components}" ${i})
+                    string(JSON component GET "${components}" ${i})
+                    if(NOT component_type STREQUAL "STRING" OR component STREQUAL "" OR component IN_LIST seen)
+                        message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name}."
+                            "components must contain unique non-empty strings.")
+                    endif()
+                    list(APPEND seen "${component}")
+                endforeach()
+            endif()
+            string(JSON normalized SET "${normalized}" components "${components}")
+        endif()
+        string(JSON result SET "${result}" "${dependency_name}" "${normalized}")
+    endforeach()
+    cdpm_canonical_json("${result}" result)
+    set(${out_json} "${result}")
+    return(PROPAGATE ${out_json})
+endfunction()
+
+# .. rst:
+# ``_cdpm_assert_dependency_sets_disjoint(<pkg> <managed_json> <system_json> <context>)``
+function(_cdpm_assert_dependency_sets_disjoint pkg_name managed_json system_json context)
+    string(JSON managed_type ERROR_VARIABLE managed_err TYPE "${managed_json}")
+    if(managed_err OR NOT managed_type STREQUAL "OBJECT")
+        return()
+    endif()
+    _cdpm_json_foreach("${managed_json}" managed_names)
+    _cdpm_json_foreach("${system_json}" system_names)
+    foreach(managed_name IN LISTS managed_names)
+        string(TOLOWER "${managed_name}" managed_key)
+        foreach(system_name IN LISTS system_names)
+            string(TOLOWER "${system_name}" system_key)
+            if(managed_key STREQUAL system_key)
+                message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': dependency '${managed_name}' appears in "
+                    "both effective dependencies and system_dependencies (${context}).")
+            endif()
+        endforeach()
+    endforeach()
+endfunction()
+
+# .. rst:
+# ``_cdpm_validate_repo_system_dependencies(<pkg_name> <pkg_json>)``
+function(_cdpm_validate_repo_system_dependencies pkg_name pkg_json)
+    string(JSON package_system ERROR_VARIABLE package_system_err GET "${pkg_json}" system_dependencies)
+    if(package_system_err)
+        set(package_system "{}")
+    else()
+        _cdpm_normalize_system_dependencies("${pkg_name}" "${package_system}" system_dependencies package_system)
+    endif()
+    string(JSON package_managed ERROR_VARIABLE package_managed_err GET "${pkg_json}" dependencies)
+    if(package_managed_err)
+        set(package_managed "{}")
+    endif()
+    _cdpm_assert_dependency_sets_disjoint("${pkg_name}" "${package_managed}" "${package_system}" "package level")
+
+    string(JSON versions ERROR_VARIABLE versions_err GET "${pkg_json}" versions)
+    if(versions_err)
+        return()
+    endif()
+    _cdpm_json_foreach("${versions}" version_names)
+    foreach(version IN LISTS version_names)
+        string(JSON effective_system ERROR_VARIABLE system_err GET
+            "${versions}" "${version}" system_dependencies)
+        if(system_err)
+            set(effective_system "${package_system}")
+        else()
+            _cdpm_normalize_system_dependencies("${pkg_name}" "${effective_system}"
+                "versions.${version}.system_dependencies" effective_system)
+        endif()
+        string(JSON effective_managed ERROR_VARIABLE managed_err GET "${versions}" "${version}" dependencies)
+        if(managed_err)
+            set(effective_managed "${package_managed}")
+        endif()
+        _cdpm_assert_dependency_sets_disjoint("${pkg_name}" "${effective_managed}" "${effective_system}"
+            "version '${version}'")
+    endforeach()
+endfunction()
+
+function(_cdpm_validate_repo_managed_dependencies pkg_name pkg_json)
+    string(JSON package_dependencies ERROR_VARIABLE package_err GET "${pkg_json}" dependencies)
+    if(package_err)
+        set(package_dependencies "{}")
+    else()
+        _cdpm_normalize_managed_dependencies("${pkg_name}" "${package_dependencies}" dependencies
+            package_dependencies)
+    endif()
+    string(JSON versions ERROR_VARIABLE versions_err GET "${pkg_json}" versions)
+    if(versions_err)
+        return()
+    endif()
+    _cdpm_json_foreach("${versions}" version_names)
+    foreach(version IN LISTS version_names)
+        string(JSON version_dependencies ERROR_VARIABLE dependency_err GET
+            "${versions}" "${version}" dependencies)
+        if(NOT dependency_err)
+            _cdpm_normalize_managed_dependencies("${pkg_name}" "${version_dependencies}"
+                "versions.${version}.dependencies" unused)
+        endif()
     endforeach()
 endfunction()
 
@@ -860,6 +1141,11 @@ endfunction()
 function(_cdpm_validate_repo_package pkg_name pkg_json)
     _cdpm_validate_repo_source("${pkg_name}" "${pkg_json}")
 
+    string(JSON package_options ERROR_VARIABLE package_options_err GET "${pkg_json}" options)
+    if(NOT package_options_err)
+        _cdpm_validate_option_keys("${package_options}" "repo package '${pkg_name}'")
+    endif()
+
     # build_system (if present) must resolve to a registered driver.
     string(JSON bs ERROR_VARIABLE bs_err GET "${pkg_json}" "build_system")
     if(NOT bs_err)
@@ -874,6 +1160,16 @@ function(_cdpm_validate_repo_package pkg_name pkg_json)
     # must parse - a malformed range is a registry authoring error, caught early.
     _cdpm_validate_repo_patches("${pkg_name}" "${pkg_json}")
     _cdpm_validate_repo_version_options("${pkg_name}" "${pkg_json}")
+    _cdpm_validate_repo_managed_dependencies("${pkg_name}" "${pkg_json}")
+    _cdpm_validate_repo_system_dependencies("${pkg_name}" "${pkg_json}")
+
+    string(JSON find_name ERROR_VARIABLE find_name_err GET "${pkg_json}" find_package_name)
+    if(NOT find_name_err)
+        string(JSON find_name_type TYPE "${pkg_json}" find_package_name)
+        if(NOT find_name_type STREQUAL "STRING" OR find_name STREQUAL "")
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': find_package_name must be a non-empty string.")
+        endif()
+    endif()
 
     string(JSON src_type GET "${pkg_json}" "source" "type")
 
@@ -888,16 +1184,23 @@ function(_cdpm_validate_repo_package pkg_name pkg_json)
         string(JSON ver_obj GET "${versions}" "${ver}")
         if(src_type STREQUAL "git")
             string(JSON rev ERROR_VARIABLE rev_err GET "${ver_obj}" "rev")
-            if(rev_err OR rev STREQUAL "")
+            string(LENGTH "${rev}" rev_length)
+            if(rev_err OR NOT rev_length EQUAL 40 OR NOT rev MATCHES [[^[0-9A-Fa-f]+$]])
                 message(FATAL_ERROR "[cdpm] repo package '${pkg_name}' version '${ver}': git source "
                     "requires a full 'rev' (40-hex commit).")
             endif()
         elseif(src_type STREQUAL "url")
             string(JSON sha ERROR_VARIABLE sha_err GET "${ver_obj}" "sha256")
-            if(sha_err OR sha STREQUAL "")
+            string(LENGTH "${sha}" sha_length)
+            if(sha_err OR NOT sha_length EQUAL 64 OR NOT sha MATCHES [[^[0-9A-Fa-f]+$]])
                 message(FATAL_ERROR "[cdpm] repo package '${pkg_name}' version '${ver}': url source "
-                    "requires 'sha256' for integrity.")
+                    "requires 'sha256' as exactly 64 hex characters.")
             endif()
+        endif()
+
+        string(JSON version_options ERROR_VARIABLE version_options_err GET "${ver_obj}" options)
+        if(NOT version_options_err)
+            _cdpm_validate_option_keys("${version_options}" "repo package '${pkg_name}' version '${ver}'")
         endif()
     endforeach()
 endfunction()
@@ -1027,6 +1330,24 @@ function(cdpm_load_repo repo_file)
             continue()
         endif()
         string(JSON merged SET "${merged}" "packages" "${name}" "${pkg_json}")
+
+        cdpm_get_package_find_name("${name}" "${pkg_json}" find_name)
+        string(TOLOWER "${find_name}" find_key)
+        string(JSON merged_count LENGTH "${merged}" packages)
+        math(EXPR merged_last "${merged_count} - 1")
+        foreach(merged_index RANGE 0 ${merged_last})
+            string(JSON other_name MEMBER "${merged}" packages ${merged_index})
+            if(other_name STREQUAL name)
+                continue()
+            endif()
+            string(JSON other_meta GET "${merged}" packages "${other_name}")
+            cdpm_get_package_find_name("${other_name}" "${other_meta}" other_find_name)
+            string(TOLOWER "${other_find_name}" other_find_key)
+            if(find_key STREQUAL other_find_key)
+                message(FATAL_ERROR "[cdpm] duplicate find_package_name '${find_name}' for packages '${other_name}' "
+                    "and '${name}'.")
+            endif()
+        endforeach()
     endforeach()
 
     set_property(GLOBAL PROPERTY CDPM_MERGED_REPO "${merged}")
@@ -1040,6 +1361,7 @@ endfunction()
 # then the platform default ``$ENV{HOME}/.cdpm/store`` (``$ENV{LOCALAPPDATA}/cdpm/store`` on Windows). The
 # directory is created if missing.
 function(_cdpm_resolve_store_dir out_dir)
+    cmake_parse_arguments(arg "NO_CREATE" "" "" ${ARGN})
     if(DEFINED CDPM_STORE_DIR AND NOT CDPM_STORE_DIR STREQUAL "")
         set(dir "${CDPM_STORE_DIR}")
     else()
@@ -1060,7 +1382,9 @@ function(_cdpm_resolve_store_dir out_dir)
         endif()
     endif()
 
-    file(MAKE_DIRECTORY "${dir}")
+    if(NOT arg_NO_CREATE)
+        file(MAKE_DIRECTORY "${dir}")
+    endif()
     set(${out_dir} "${dir}")
     return(PROPAGATE ${out_dir})
 endfunction()
@@ -1080,8 +1404,8 @@ function(_cdpm_clone_repo_baseline url baseline out_repo_file)
             "(got '${baseline}').")
     endif()
 
-    find_package(Git QUIET)
-    if(NOT Git_FOUND)
+    find_program(GIT_EXECUTABLE NAMES git)
+    if(NOT GIT_EXECUTABLE)
         message(FATAL_ERROR "[cdpm] git repo '${url}': Git was not found but is required to "
             "materialize a kind=git repository.")
     endif()
@@ -1147,7 +1471,7 @@ endfunction()
 # (``CDPM_REPO_JSON``) and registers every repository into ``CDPM_MERGED_REPO``. Dispatch by
 # ``kind``:
 #
-# * ``file`` - ``path`` resolved relative to ``CMAKE_SOURCE_DIR`` when not absolute, loaded directly.
+# * ``file`` - ``path`` resolved relative to the project directory when not absolute, loaded directly.
 # * ``git`` - cloned at its ``baseline`` into the store (:cmake:command:`_cdpm_clone_repo_baseline`), then
 #   loaded.
 #
@@ -1155,6 +1479,7 @@ endfunction()
 # array is the resolution priority (first registration wins); :cmake:command:`cdpm_config_load` must run
 # first.
 function(cdpm_load_repos)
+    _cdpm_resolve_project_dir(project_dir)
     get_property(repo_json GLOBAL PROPERTY CDPM_REPO_JSON)
     if(NOT repo_json)
         return()
@@ -1190,7 +1515,7 @@ function(cdpm_load_repos)
                 message(FATAL_ERROR "[cdpm] repos[${i}] (kind=file): missing 'path'.")
             endif()
             if(NOT IS_ABSOLUTE "${path}")
-                set(path "${CMAKE_SOURCE_DIR}/${path}")
+                cmake_path(ABSOLUTE_PATH path BASE_DIRECTORY "${project_dir}" NORMALIZE OUTPUT_VARIABLE path)
             endif()
             cdpm_load_repo("${path}" PACKAGES "${masks}")
         elseif(kind STREQUAL "git")
@@ -1214,6 +1539,87 @@ endfunction()
 # =============================================================================
 # Repository queries
 # =============================================================================
+
+function(cdpm_get_package_dependencies pkg_name meta_json version out_json)
+    string(JSON dependencies ERROR_VARIABLE dependencies_err GET "${meta_json}" dependencies)
+    if(dependencies_err)
+        set(dependencies "{}")
+    endif()
+    if(NOT version STREQUAL "")
+        string(JSON version_dependencies ERROR_VARIABLE version_err GET
+            "${meta_json}" versions "${version}" dependencies)
+        if(NOT version_err)
+            set(dependencies "${version_dependencies}")
+        endif()
+    endif()
+    _cdpm_normalize_managed_dependencies("${pkg_name}" "${dependencies}" "effective dependencies" result)
+    set(${out_json} "${result}")
+    return(PROPAGATE ${out_json})
+endfunction()
+
+function(cdpm_get_package_find_name pkg_key meta_json out_name)
+    string(JSON find_name ERROR_VARIABLE find_name_err GET "${meta_json}" find_package_name)
+    if(find_name_err)
+        set(find_name "${pkg_key}")
+    endif()
+    set(${out_name} "${find_name}")
+    return(PROPAGATE ${out_name})
+endfunction()
+
+function(cdpm_find_package_in_repo package_or_find_name out_found out_pkg_key out_meta_json)
+    cdpm_find_in_repo("${package_or_find_name}" found meta)
+    if(found)
+        string(TOLOWER "${package_or_find_name}" result_key)
+        set(${out_found} TRUE)
+        set(${out_pkg_key} "${result_key}")
+        set(${out_meta_json} "${meta}")
+        return(PROPAGATE ${out_found} ${out_pkg_key} ${out_meta_json})
+    endif()
+    string(TOLOWER "${package_or_find_name}" requested_key)
+    get_property(merged GLOBAL PROPERTY CDPM_MERGED_REPO)
+    if(merged)
+        _cdpm_json_foreach("${merged}" ignored)
+        string(JSON packages GET "${merged}" packages)
+        _cdpm_json_foreach("${packages}" package_keys)
+        foreach(candidate_key IN LISTS package_keys)
+            string(JSON candidate_meta GET "${packages}" "${candidate_key}")
+            cdpm_get_package_find_name("${candidate_key}" "${candidate_meta}" find_name)
+            string(TOLOWER "${find_name}" find_key)
+            if(find_key STREQUAL requested_key)
+                set(${out_found} TRUE)
+                set(${out_pkg_key} "${candidate_key}")
+                set(${out_meta_json} "${candidate_meta}")
+                return(PROPAGATE ${out_found} ${out_pkg_key} ${out_meta_json})
+            endif()
+        endforeach()
+    endif()
+    set(${out_found} FALSE)
+    set(${out_pkg_key} "")
+    set(${out_meta_json} "{}")
+    return(PROPAGATE ${out_found} ${out_pkg_key} ${out_meta_json})
+endfunction()
+
+# .. rst:
+# ``cdpm_get_package_system_dependencies(<pkg_name> <meta_json> <version> <out_json>)``
+#
+# Returns the canonical effective system dependency map. A per-version declaration replaces the complete
+# package-level map; it is not deep-merged.
+function(cdpm_get_package_system_dependencies pkg_name meta_json version out_json)
+    string(JSON dependencies ERROR_VARIABLE dependencies_err GET "${meta_json}" "system_dependencies")
+    if(dependencies_err)
+        set(dependencies "{}")
+    endif()
+    if(NOT version STREQUAL "")
+        string(JSON version_dependencies ERROR_VARIABLE version_err GET
+            "${meta_json}" "versions" "${version}" "system_dependencies")
+        if(NOT version_err)
+            set(dependencies "${version_dependencies}")
+        endif()
+    endif()
+    _cdpm_normalize_system_dependencies("${pkg_name}" "${dependencies}" "effective system_dependencies" result)
+    set(${out_json} "${result}")
+    return(PROPAGATE ${out_json})
+endfunction()
 
 # .. rst:
 # ``cdpm_find_in_repo(<pkg_name> <out_found> <out_meta_json>)``
@@ -1388,10 +1794,11 @@ function(_cdpm_effective_package_section pkg section out_json)
 
     string(TOLOWER "${pkg}" name)
 
-    get_property(eff GLOBAL PROPERTY CDPM_EFFECTIVE_CONFIG)
-    if(NOT eff)
+    get_property(eff_set GLOBAL PROPERTY CDPM_EFFECTIVE_CONFIG SET)
+    if(NOT eff_set)
         return()
     endif()
+    get_property(eff GLOBAL PROPERTY CDPM_EFFECTIVE_CONFIG)
 
     # Global section (lower precedence).
     string(JSON global_sec ERROR_VARIABLE g_err GET "${eff}" "${section}")
@@ -1507,6 +1914,7 @@ function(cdpm_get_package_options pkg_name pkg_version out_options_json)
         cdpm_merge_json("${effective}" "${cli_opts}" effective)
     endif()
 
+    _cdpm_validate_option_keys("${effective}" "package '${name}' effective options")
     cdpm_canonical_json("${effective}" canonical)
     set(${out_options_json} "${canonical}")
     return(PROPAGATE ${out_options_json})

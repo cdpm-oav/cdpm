@@ -1,0 +1,6 @@
+cmake_policy(SET CMP0011 NEW)
+include(cdpm_config)
+set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/duplicate-find.json")
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/.tmp")
+file(WRITE "${tmp}" [[{"repo_schema":1,"packages":{"a":{"find_package_name":"Same","source":{"type":"local","url":"."},"versions":{"1":{}}},"b":{"find_package_name":"same","source":{"type":"local","url":"."},"versions":{"1":{}}}}}]])
+cdpm_load_repo("${tmp}")

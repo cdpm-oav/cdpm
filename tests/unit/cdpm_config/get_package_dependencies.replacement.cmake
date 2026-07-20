@@ -1,0 +1,15 @@
+cmake_policy(SET CMP0011 NEW)
+include(cdpm_config)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
+
+set(meta [[{"dependencies":{"a":{"version":"1","components":["x"]}},"versions":{"2":{"dependencies":{"b":{}}}}}]])
+cdpm_get_package_dependencies(pkg "${meta}" 1 package_dependencies)
+cdpm_get_package_dependencies(pkg "${meta}" 2 version_dependencies)
+assert_json_eq("${package_dependencies}" [[{"a":{"components":["x"],"version":"1"}}]]
+    "package dependencies are canonical")
+assert_json_eq("${version_dependencies}" [[{"b":{}}]] "version dependencies fully replace package dependencies")
+cdpm_get_package_find_name(registry_key [[{"find_package_name":"PublicName"}]] find_name)
+assert_eq("${find_name}" PublicName "explicit find name")
+cdpm_get_package_find_name(registry_key [[{}]] default_find_name)
+assert_eq("${default_find_name}" registry_key "default find name")
+message(STATUS "PASS: get_package_dependencies.replacement")

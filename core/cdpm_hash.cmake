@@ -8,6 +8,7 @@ cmake_policy(SET CMP0140 NEW)
 # patch-applicability resolver (cdpm_resolve_patch_list).
 include(cdpm_utils)
 include(cdpm_verange)
+include(cdpm_context)
 
 # .. rst:
 # ``_cdpm_hash_compiler_part(<lang> <out_part>)``
@@ -80,7 +81,7 @@ endfunction()
 # so a patch that is scoped out of this version (via ``applies_to``/``exclude``) never perturbs its hash,
 # and a version that does receive a patch is bound to that patch's content. Each existing patch file
 # contributes the SHA-256 of its content, so editing a patch forces a rebuild (mirroring Spack's per-patch
-# sha256 and vcpkg's per-patch ABI entries). Paths are resolved relative to ``CMAKE_SOURCE_DIR`` when not
+# sha256 and vcpkg's per-patch ABI entries). Paths are resolved relative to the project directory when not
 # absolute. No applicable patches yields an empty contribution. Apply order is preserved verbatim.
 function(_cdpm_hash_patches_part meta_json version out_part)
     set(result "")
@@ -99,13 +100,14 @@ function(_cdpm_hash_patches_part meta_json version out_part)
     endif()
 
     set(parts "")
+    _cdpm_resolve_project_dir(project_dir)
     math(EXPR last "${count} - 1")
     foreach(i RANGE 0 ${last})
         string(JSON patch_path GET "${patches}" ${i})
 
         set(resolved "${patch_path}")
         if(NOT IS_ABSOLUTE "${resolved}")
-            set(resolved "${CMAKE_SOURCE_DIR}/${resolved}")
+            cmake_path(ABSOLUTE_PATH resolved BASE_DIRECTORY "${project_dir}" NORMALIZE OUTPUT_VARIABLE resolved)
         endif()
 
         if(EXISTS "${resolved}" AND NOT IS_DIRECTORY "${resolved}")
@@ -123,7 +125,8 @@ function(_cdpm_hash_patches_part meta_json version out_part)
 endfunction()
 
 # .. rst:
-# ``cdpm_compute_config_hash(<pkg_name> <pkg_version> <meta_json> <out_hash>)``
+# ``cdpm_compute_config_hash(<pkg_name> <pkg_version> <meta_json> <out_hash>
+#                           [DEPENDENCY_IDENTITIES <json>] [SYSTEM_IDENTITIES <json>])``
 #
 # Computes a deterministic 16-hex-character configuration hash that uniquely identifies a build of
 # ``<pkg_name>`` at ``<pkg_version>`` under the current environment. Two builds that share this hash are
@@ -136,8 +139,10 @@ endfunction()
 #   :cmake:command:`_cdpm_hash_languages_part`);
 # * ``CMAKE_VERSION`` - CMake injects implicit flags/macros that drift across releases, so the generator
 #   tool version participates (as vcpkg's ABI hash does);
-# * SHA-256 of the ``CMAKE_TOOLCHAIN_FILE`` *content* (not its path) when one is set - reproducible across
-#   machines with different toolchain install locations;
+# * normalized absolute ``CMAKE_TOOLCHAIN_FILE`` path and SHA-256 of that root file's content when one is
+#   set. The path is intentionally part of the identity because toolchains may use
+#   ``CMAKE_CURRENT_LIST_DIR`` or relative includes. Transitive include contents are not recursively parsed;
+#   the current contract tracks only the root toolchain identity;
 # * ``CMAKE_SYSTEM_NAME``/``CMAKE_SYSTEM_PROCESSOR``, ``CMAKE_BUILD_TYPE``, ``CMAKE_GENERATOR``;
 # * the package's canonical effective options (via ``cdpm_get_package_options`` when available) - for the
 #   ``gn`` driver these are the native GN build args, for ``cmake`` the ``-D`` cache entries, etc.;
@@ -154,6 +159,10 @@ endfunction()
 # are optional: when those commands are absent (pure hash unit tests) the corresponding components are
 # omitted rather than failing.
 function(cdpm_compute_config_hash pkg_name pkg_version meta_json out_hash)
+    cmake_parse_arguments(arg "" "DEPENDENCY_IDENTITIES;SYSTEM_IDENTITIES" "" ${ARGN})
+    if((DEFINED arg_DEPENDENCY_IDENTITIES OR DEFINED arg_SYSTEM_IDENTITIES) AND NOT COMMAND cdpm_canonical_json)
+        include(cdpm_config)
+    endif()
     string(TOLOWER "${pkg_name}" name)
 
     set(parts "${name}@${pkg_version}")
@@ -167,11 +176,17 @@ function(cdpm_compute_config_hash pkg_name pkg_version meta_json out_hash)
     # ---- Build tool versions ----------------------------------------------------
     string(APPEND parts "|cmake:${CMAKE_VERSION}")
 
-    # ---- Toolchain file content -------------------------------------------------
-    if(DEFINED CMAKE_TOOLCHAIN_FILE AND NOT CMAKE_TOOLCHAIN_FILE STREQUAL ""
-       AND EXISTS "${CMAKE_TOOLCHAIN_FILE}")
-        file(SHA256 "${CMAKE_TOOLCHAIN_FILE}" tc_hash)
-        string(APPEND parts "|tc:${tc_hash}")
+    # ---- Root toolchain identity ------------------------------------------------
+    # The normalized path and root-file content are both required: byte-identical files at different paths
+    # may behave differently through CMAKE_CURRENT_LIST_DIR or relative includes. Included files are not
+    # recursively discovered or hashed.
+    if(DEFINED CMAKE_TOOLCHAIN_FILE AND NOT CMAKE_TOOLCHAIN_FILE STREQUAL "")
+        set(tc_path "${CMAKE_TOOLCHAIN_FILE}")
+        cmake_path(ABSOLUTE_PATH tc_path BASE_DIRECTORY "${CMAKE_SOURCE_DIR}" NORMALIZE OUTPUT_VARIABLE tc_path)
+        if(EXISTS "${tc_path}")
+            file(SHA256 "${tc_path}" tc_hash)
+            string(APPEND parts "|tc:${tc_path}:${tc_hash}")
+        endif()
     endif()
 
     # ---- Platform / generator / build type --------------------------------------
@@ -196,6 +211,15 @@ function(cdpm_compute_config_hash pkg_name pkg_version meta_json out_hash)
     _cdpm_hash_patches_part("${meta_json}" "${pkg_version}" patches_part)
     if(NOT patches_part STREQUAL "")
         string(APPEND parts "|patches:${patches_part}")
+    endif()
+
+    if(DEFINED arg_SYSTEM_IDENTITIES)
+        cdpm_canonical_json("${arg_SYSTEM_IDENTITIES}" system_identities)
+        string(APPEND parts "|system:${system_identities}")
+    endif()
+    if(DEFINED arg_DEPENDENCY_IDENTITIES)
+        cdpm_canonical_json("${arg_DEPENDENCY_IDENTITIES}" dependency_identities)
+        string(APPEND parts "|dependencies:${dependency_identities}")
     endif()
 
     # ---- Optional toolset -------------------------------------------------------

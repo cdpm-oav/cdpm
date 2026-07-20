@@ -1,0 +1,6 @@
+cmake_policy(SET CMP0011 NEW)
+include(cdpm_config)
+set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/managed-unknown.json")
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/.tmp")
+file(WRITE "${tmp}" [[{"repo_schema":1,"packages":{"a":{"source":{"type":"local","url":"."},"dependencies":{"b":{"unknown":1}},"versions":{"1":{}}}}}]])
+cdpm_load_repo("${tmp}")
