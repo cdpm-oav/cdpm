@@ -1,0 +1,25 @@
+include(cdpm_build)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
+
+set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/schema1_project_relative")
+file(REMOVE_RECURSE "${tmp}")
+file(MAKE_DIRECTORY "${tmp}/patches" "${tmp}/registry")
+file(WRITE "${tmp}/patches/fix.diff" "patch")
+file(WRITE "${tmp}/registry/packages.json" [[{"repo_schema":1,"packages":{"demo":{
+"source":{"type":"git","url":"https://example.test/demo.git"},
+"versions":{"1.0.0":{"rev":"0123456789abcdef0123456789abcdef01234567",
+"patches":["patches/fix.diff"]}}}}}]])
+set(CDPM_PROJECT_DIR "${tmp}")
+set_property(GLOBAL PROPERTY CDPM_MERGED_REPO "")
+set_property(GLOBAL PROPERTY CDPM_REPO_PROVENANCE "")
+cdpm_load_repo("${tmp}/registry/packages.json")
+cdpm_find_in_repo(demo found meta)
+cdpm_collect_patches(demo 1.0.0 "${meta}" patches)
+string(JSON actual GET "${patches}" 0)
+assert_eq("${actual}" "${tmp}/patches/fix.diff" "schema-1 patch remains project-directory-relative")
+cdpm_compute_config_hash(demo 1.0.0 "${meta}" before)
+file(WRITE "${tmp}/patches/fix.diff" "changed")
+cdpm_compute_config_hash(demo 1.0.0 "${meta}" after)
+assert_ne("${before}" "${after}" "schema-1 project-relative patch bytes still feed the hash")
+file(REMOVE_RECURSE "${tmp}")
+message(STATUS "PASS: schema-1 patch behavior remains project-relative")

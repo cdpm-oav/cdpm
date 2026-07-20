@@ -140,6 +140,7 @@ Commands:
   provision [--lockfile <path>]    Install all packages from a lockfile
   add-registry <path> [--scope machine|project]
                                    Persist a packages.json registry into a config layer
+  validate-registry <path>         Validate a registry directory or packages.json (read-only)
   config blame [<path>]            Show which config layer last set each value
 
 Environment / cache variables:
@@ -151,6 +152,18 @@ Environment / cache variables:
   CDPM_PROJECT_DIR                 Project directory override used by core modules
   CDPM_RUNTIME_DIR                 Scratch directory override for builds and generated files
 ]])
+endfunction()
+
+# :brief: Fully validates one physical registry without fetching, building, or writing project/registry state.
+function(cdpm_cmd_validate_registry registry_path)
+    if(registry_path STREQUAL "")
+        message(FATAL_ERROR "[cdpm] 'validate-registry' requires a registry directory or packages.json path.")
+    endif()
+    cdpm_validate_registry("${registry_path}" valid diagnostics)
+    if(NOT valid)
+        message(FATAL_ERROR "[cdpm] Registry validation failed for '${registry_path}':\n${diagnostics}")
+    endif()
+    message(STATUS "[cdpm] Registry is valid: ${registry_path}")
 endfunction()
 
 # :brief: Prints the cdpm version string.
@@ -200,8 +213,7 @@ function(cdpm_cmd_info pkg_name)
         )
     endif()
     cdpm_config_load()
-    # Materialize the declared repositories (kind=file|git) into CDPM_MERGED_REPO; without this
-    # cdpm_find_in_repo() always misses.
+    # Register declared repositories (kind=file|git); schema-2 metadata materializes on lookup.
     cdpm_load_repos()
 
     cdpm_find_in_repo("${pkg_name}" __found __meta_json)

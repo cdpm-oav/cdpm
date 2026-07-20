@@ -1,0 +1,15 @@
+include(cdpm_config)
+include("${CMAKE_CURRENT_LIST_DIR}/fixture_helpers.cmake")
+init_registry_fixture(patch_symlink_escape tmp)
+file(WRITE "${tmp}/outside.diff" "patch")
+file(CREATE_LINK "${tmp}/outside.diff" "${tmp}/packages/demo/linked.diff" SYMBOLIC RESULT link_result)
+if(NOT link_result STREQUAL "0")
+    message(STATUS "SKIP: symlink creation unsupported: ${link_result}")
+    return()
+endif()
+file(WRITE "${tmp}/packages/demo/package.json" [[{"source":{"type":"git","url":"https://example.test/demo.git"},
+"versions":{"1.0.0":{"rev":"0123456789abcdef0123456789abcdef01234567",
+"patches":["linked.diff"]}}}]])
+file(WRITE "${tmp}/packages.json" [[{"repo_schema":2,"packages":{"demo":"packages/demo/package.json"}}]])
+cdpm_load_repo("${tmp}/packages.json")
+cdpm_find_in_repo(demo found meta)

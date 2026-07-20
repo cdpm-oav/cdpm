@@ -112,8 +112,8 @@ endfunction()
 # Returns the source patches that apply to ``<pkg_version>`` as a JSON array of *absolute* paths in apply
 # order, in ``<out_patches_json>`` (``[]`` when none). The applicable set and its order come from
 # :cmake:command:`cdpm_resolve_patch_list` (package-level ``patches[]`` filtered by ``applies_to``/
-# ``exclude``, then per-version ``versions.<version>.patches``). Relative paths are resolved against
-# the project directory; a missing file is fatal. The patches are applied by the build driver via
+# ``exclude``, then per-version ``versions.<version>.patches``). Relative paths are project-relative for schema 1
+# and manifest-directory-relative with containment checks for schema 2; a missing file is fatal. The build driver uses
 # ExternalProject's ``PATCH_COMMAND`` (``git apply``), and their contents already feed the config hash
 # (see :cmake:command:`cdpm_compute_config_hash`).
 function(cdpm_collect_patches pkg_name pkg_version meta_json out_patches_json)
@@ -128,13 +128,9 @@ function(cdpm_collect_patches pkg_name pkg_version meta_json out_patches_json)
     endif()
 
     math(EXPR last "${count} - 1")
-    _cdpm_resolve_project_dir(project_dir)
     foreach(i RANGE 0 ${last})
-        string(JSON patch_path GET "${specs}" ${i})
-        if(NOT IS_ABSOLUTE "${patch_path}")
-            cmake_path(ABSOLUTE_PATH patch_path BASE_DIRECTORY "${project_dir}" NORMALIZE
-                OUTPUT_VARIABLE patch_path)
-        endif()
+        string(JSON authored_path GET "${specs}" ${i})
+        _cdpm_registry_resolve_patch_path("${name}" "${authored_path}" patch_path)
         if(NOT EXISTS "${patch_path}")
             message(FATAL_ERROR "[cdpm] package '${name}': patch not found: ${patch_path}")
         endif()

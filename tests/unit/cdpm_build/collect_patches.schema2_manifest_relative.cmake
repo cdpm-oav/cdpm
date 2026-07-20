@@ -1,0 +1,21 @@
+include(cdpm_build)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
+
+set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/schema2_manifest_relative")
+file(REMOVE_RECURSE "${tmp}")
+file(MAKE_DIRECTORY "${tmp}/packages/demo/patches")
+file(WRITE "${tmp}/packages/demo/patches/fix.diff" "patch")
+file(WRITE "${tmp}/packages/demo/package.json" [[{"source":{"type":"git","url":"https://example.test/demo.git"},
+"versions":{"1.0.0":{"rev":"0123456789abcdef0123456789abcdef01234567",
+"patches":["patches/fix.diff"]}}}]])
+file(WRITE "${tmp}/packages.json" [[{"repo_schema":2,"packages":{"demo":"packages/demo/package.json"}}]])
+set_property(GLOBAL PROPERTY CDPM_MERGED_REPO "")
+set_property(GLOBAL PROPERTY CDPM_REPO_PROVENANCE "")
+cdpm_load_repo("${tmp}/packages.json")
+cdpm_find_in_repo(demo found meta)
+cdpm_collect_patches(demo 1.0.0 "${meta}" patches)
+file(REAL_PATH "${tmp}/packages/demo/patches/fix.diff" expected)
+string(JSON actual GET "${patches}" 0)
+assert_eq("${actual}" "${expected}" "schema-2 patch resolves relative to manifest directory")
+file(REMOVE_RECURSE "${tmp}")
+message(STATUS "PASS: schema-2 patches are manifest-relative")

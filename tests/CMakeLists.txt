@@ -128,6 +128,7 @@ add_unit_tests(MODULE cdpm_hash
         compute.toolchain_var_changes_hash
         compute.system_identities
         compute.dependency_identities
+        compute.schema2_manifest_patch
 )
 
 add_unit_tests(MODULE cdpm_toolchain
@@ -148,6 +149,8 @@ add_unit_tests(MODULE cdpm_build
         prepare_source.local
         collect_patches.absolute
         collect_patches.applies_to
+        collect_patches.schema2_manifest_relative
+        collect_patches.schema1_project_relative
         build.driver_validation_user_cleanup
         build.sentinel_skip
     FAIL
@@ -209,6 +212,7 @@ add_unit_tests(MODULE cdpm_config
         get_package_source.repo_default
         get_package_user_kv.tracked_split
         load_repos.file_and_masks
+        load_repos.force_resets_registry
         load_repos.git_local_baseline
         merge_json.deep
         merge_json.remove_operator
@@ -236,6 +240,49 @@ add_unit_tests(MODULE cdpm_config
         load_repo.system_dependencies_unknown_field
         load_repo.managed_dependencies_unknown_field
         load_repo.duplicate_find_name
+)
+
+add_unit_tests(MODULE cdpm_registry
+    PASS
+        load.valid_schema2
+        load.schema1_compatibility
+        load.alias_canonical
+        load.alias_deterministic_duplicate
+        load.selective_direct
+        load.schema2_masks_overlay
+        load.schema2_repeated_masks
+        load.schema_equivalence
+        load.root_index_fifo
+        validate.api
+        validate.cli
+        load.malformed_index
+        load.malformed_manifest
+        load.manifest_traversal
+    FAIL
+        load.malformed_value
+        load.key_mismatch
+        load.case_collision
+        load.manifest_absolute
+        load.manifest_symlink_escape
+        load.patch_absolute
+        load.patch_traversal
+        load.patch_missing
+        load.patch_symlink_escape
+        load.manifest_fifo
+        load.patch_fifo
+)
+set_tests_properties(
+    unit.cdpm_registry.load.manifest_symlink_escape
+    unit.cdpm_registry.load.patch_symlink_escape
+    unit.cdpm_registry.load.manifest_fifo
+    unit.cdpm_registry.load.patch_fifo
+    PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP: symlink creation unsupported"
+)
+set_tests_properties(
+    unit.cdpm_registry.load.manifest_fifo
+    unit.cdpm_registry.load.patch_fifo
+    unit.cdpm_registry.load.root_index_fifo
+    PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP: POSIX FIFO unavailable"
 )
 
 add_unit_tests(MODULE cdpm_system_dependencies

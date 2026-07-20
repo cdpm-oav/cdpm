@@ -14,6 +14,7 @@ include(cdpm_utils) # JSON iteration helpers (_cdpm_json_foreach / _cdpm_json_ge
 include(cdpm_uri) # URI parsing/validation (cdpm_parse_uri) - used by repo source validation.
 include(cdpm_verange) # Version-range primitive (cdpm_parse_version_range) - used to validate patch/option ranges.
 include(cdpm_context)
+include(cdpm_registry)
 
 # .. rst:
 # ``_cdpm_json_set_safe(<json> <key> <value> <value_type> <out_json>)``
@@ -506,6 +507,13 @@ function(cdpm_config_load)
     set_property(GLOBAL PROPERTY CDPM_REPO_JSON "${repo_json}")
     set_property(GLOBAL PROPERTY CDPM_CONFIG_ORIGINS "${origins}")
     set_property(GLOBAL PROPERTY CDPM_CONFIG_LOADED TRUE)
+    get_property(config_generation GLOBAL PROPERTY CDPM_CONFIG_GENERATION)
+    if(NOT config_generation)
+        set(config_generation 0)
+    endif()
+    math(EXPR config_generation "${config_generation} + 1")
+    set_property(GLOBAL PROPERTY CDPM_CONFIG_GENERATION "${config_generation}")
+    set_property(GLOBAL PROPERTY CDPM_PROVIDER_REPOS_LOADED FALSE)
 endfunction()
 
 # .. rst:
@@ -1229,7 +1237,13 @@ function(_cdpm_pkg_matches_masks name masks_json out_ok)
             string(LENGTH "${mask}" mask_len)
             math(EXPR prefix_len "${mask_len} - 1")
             string(SUBSTRING "${mask}" 0 ${prefix_len} prefix)
-            if(name MATCHES "^${prefix}")
+            string(LENGTH "${name}" name_len)
+            if(name_len GREATER_EQUAL prefix_len)
+                string(SUBSTRING "${name}" 0 ${prefix_len} name_prefix)
+            else()
+                set(name_prefix "")
+            endif()
+            if(name_prefix STREQUAL prefix)
                 set(${out_ok} TRUE)
                 return(PROPAGATE ${out_ok})
             endif()
@@ -1247,17 +1261,16 @@ endfunction()
 # ``cdpm_load_repo(<repo_file> [PACKAGES <masks_json>])``
 #
 # Loads, validates, and registers one package repository file (``packages.json``). Validation covers:
-# ``repo_schema`` gate (only schema 1), a ``packages`` object, per-package source/integrity rules, and
-# ``@ref`` bans. Package keys are normalized to lower-case; a collision after normalization is a fatal
-# error.
+# ``repo_schema`` dispatch (schema 1 aggregate or schema 2 manifest index), structural checks, per-package
+# source/integrity rules, and ``@ref`` bans. Package keys are normalized to lower-case; a collision after
+# normalization is a fatal error.
 #
 # ``PACKAGES`` is the optional JSON array of ownership masks from the ``repos[]`` entry
 # (``["boost-*", "openssl"]``); only packages matching a mask are registered from this file
 # (see :cmake:command:`_cdpm_pkg_matches_masks`). An absent/empty array registers every package.
 #
-# Loaded packages accumulate into the ``CDPM_MERGED_REPO`` global property (``{"packages": {...}}``) with
-# first-registration-wins semantics, mirroring the layer/order priority of repo declarations: a package
-# already present is kept and the later definition is ignored.
+# Schema-1 packages and materialized schema-2 packages accumulate into the legacy ``CDPM_MERGED_REPO`` facade.
+# Private schema-2 descriptors preserve first-registration-wins before manifests are read.
 #
 # This materializes a repository whose ``packages.json`` is already on disk (``kind: file`` directly, or
 # ``kind: git`` after the baseline clone performed by :cmake:command:`cdpm_load_repos`).
@@ -1269,88 +1282,7 @@ function(cdpm_load_repo repo_file)
         set(masks_json "[]")
     endif()
 
-    if(NOT EXISTS "${repo_file}")
-        message(FATAL_ERROR "[cdpm] repository file not found: '${repo_file}'.")
-    endif()
-
-    file(READ "${repo_file}" raw)
-
-    string(JSON repo_type ERROR_VARIABLE type_err TYPE "${raw}")
-    if(type_err OR NOT repo_type STREQUAL "OBJECT")
-        message(FATAL_ERROR "[cdpm] repository '${repo_file}' is not a JSON object: ${type_err}")
-    endif()
-
-    string(JSON repo_schema ERROR_VARIABLE schema_err GET "${raw}" "repo_schema")
-    if(schema_err)
-        message(FATAL_ERROR "[cdpm] repository '${repo_file}': missing 'repo_schema'.")
-    endif()
-    if(NOT repo_schema EQUAL 1)
-        message(FATAL_ERROR "[cdpm] repository '${repo_file}': unsupported repo_schema '${repo_schema}' "
-            "(this cdpm understands schema 1).")
-    endif()
-
-    string(JSON packages ERROR_VARIABLE pkg_err GET "${raw}" "packages")
-    if(pkg_err)
-        # An empty repository (no packages) is allowed; nothing to register.
-        return()
-    endif()
-
-    # Start from the existing merged repo (first-registration-wins).
-    get_property(merged GLOBAL PROPERTY CDPM_MERGED_REPO)
-    if(NOT merged)
-        set(merged [=[{"packages":{}}]=])
-    endif()
-
-    set(seen_in_file "")
-    _cdpm_json_foreach("${packages}" pkg_keys)
-    foreach(orig_name IN LISTS pkg_keys)
-        string(TOLOWER "${orig_name}" name)
-        string(JSON pkg_json GET "${packages}" "${orig_name}")
-
-        # A lower-case collision *within this same file* (two keys differing only
-        # by case) is ambiguous and rejected. Cross-file priority is handled
-        # separately by the skip-if-present rule below.
-        if(name IN_LIST seen_in_file)
-            message(FATAL_ERROR "[cdpm] repository '${repo_file}': duplicate package '${name}' "
-                "after lower-case normalization.")
-        endif()
-        list(APPEND seen_in_file "${name}")
-
-        # A repo's `packages` masks scope which names it may register.
-        _cdpm_pkg_matches_masks("${name}" "${masks_json}" in_scope)
-        if(NOT in_scope)
-            continue()
-        endif()
-
-        _cdpm_validate_repo_package("${name}" "${pkg_json}")
-
-        # First registration wins across files; later repos do not override.
-        string(JSON existing ERROR_VARIABLE exists_err GET "${merged}" "packages" "${name}")
-        if(NOT exists_err)
-            continue()
-        endif()
-        string(JSON merged SET "${merged}" "packages" "${name}" "${pkg_json}")
-
-        cdpm_get_package_find_name("${name}" "${pkg_json}" find_name)
-        string(TOLOWER "${find_name}" find_key)
-        string(JSON merged_count LENGTH "${merged}" packages)
-        math(EXPR merged_last "${merged_count} - 1")
-        foreach(merged_index RANGE 0 ${merged_last})
-            string(JSON other_name MEMBER "${merged}" packages ${merged_index})
-            if(other_name STREQUAL name)
-                continue()
-            endif()
-            string(JSON other_meta GET "${merged}" packages "${other_name}")
-            cdpm_get_package_find_name("${other_name}" "${other_meta}" other_find_name)
-            string(TOLOWER "${other_find_name}" other_find_key)
-            if(find_key STREQUAL other_find_key)
-                message(FATAL_ERROR "[cdpm] duplicate find_package_name '${find_name}' for packages '${other_name}' "
-                    "and '${name}'.")
-            endif()
-        endforeach()
-    endforeach()
-
-    set_property(GLOBAL PROPERTY CDPM_MERGED_REPO "${merged}")
+    _cdpm_registry_load_repo("${repo_file}" "${masks_json}")
 endfunction()
 
 # .. rst:
@@ -1468,7 +1400,7 @@ endfunction()
 # ``cdpm_load_repos()``
 #
 # Walks the priority-ordered ``repos`` list produced by :cmake:command:`cdpm_config_load`
-# (``CDPM_REPO_JSON``) and registers every repository into ``CDPM_MERGED_REPO``. Dispatch by
+# (``CDPM_REPO_JSON``) and registers each repository. Schema 1 is eager; schema 2 records lazy descriptors. Dispatch by
 # ``kind``:
 #
 # * ``file`` - ``path`` resolved relative to the project directory when not absolute, loaded directly.
@@ -1479,6 +1411,13 @@ endfunction()
 # array is the resolution priority (first registration wins); :cmake:command:`cdpm_config_load` must run
 # first.
 function(cdpm_load_repos)
+    get_property(config_generation GLOBAL PROPERTY CDPM_CONFIG_GENERATION)
+    get_property(loaded_generation GLOBAL PROPERTY CDPM_REGISTRY_CONFIG_GENERATION)
+    if(NOT "${loaded_generation}" STREQUAL "${config_generation}")
+        _cdpm_registry_reset()
+        set_property(GLOBAL PROPERTY CDPM_REGISTRY_CONFIG_GENERATION "${config_generation}")
+    endif()
+
     _cdpm_resolve_project_dir(project_dir)
     get_property(repo_json GLOBAL PROPERTY CDPM_REPO_JSON)
     if(NOT repo_json)
@@ -1567,35 +1506,18 @@ function(cdpm_get_package_find_name pkg_key meta_json out_name)
 endfunction()
 
 function(cdpm_find_package_in_repo package_or_find_name out_found out_pkg_key out_meta_json)
-    cdpm_find_in_repo("${package_or_find_name}" found meta)
+    string(TOLOWER "${package_or_find_name}" requested_key)
+    _cdpm_registry_find_canonical("${requested_key}" found meta)
     if(found)
-        string(TOLOWER "${package_or_find_name}" result_key)
         set(${out_found} TRUE)
-        set(${out_pkg_key} "${result_key}")
+        set(${out_pkg_key} "${requested_key}")
         set(${out_meta_json} "${meta}")
         return(PROPAGATE ${out_found} ${out_pkg_key} ${out_meta_json})
     endif()
-    string(TOLOWER "${package_or_find_name}" requested_key)
-    get_property(merged GLOBAL PROPERTY CDPM_MERGED_REPO)
-    if(merged)
-        _cdpm_json_foreach("${merged}" ignored)
-        string(JSON packages GET "${merged}" packages)
-        _cdpm_json_foreach("${packages}" package_keys)
-        foreach(candidate_key IN LISTS package_keys)
-            string(JSON candidate_meta GET "${packages}" "${candidate_key}")
-            cdpm_get_package_find_name("${candidate_key}" "${candidate_meta}" find_name)
-            string(TOLOWER "${find_name}" find_key)
-            if(find_key STREQUAL requested_key)
-                set(${out_found} TRUE)
-                set(${out_pkg_key} "${candidate_key}")
-                set(${out_meta_json} "${candidate_meta}")
-                return(PROPAGATE ${out_found} ${out_pkg_key} ${out_meta_json})
-            endif()
-        endforeach()
-    endif()
-    set(${out_found} FALSE)
-    set(${out_pkg_key} "")
-    set(${out_meta_json} "{}")
+    _cdpm_registry_find_alias("${requested_key}" found package_key meta)
+    set(${out_found} "${found}")
+    set(${out_pkg_key} "${package_key}")
+    set(${out_meta_json} "${meta}")
     return(PROPAGATE ${out_found} ${out_pkg_key} ${out_meta_json})
 endfunction()
 
@@ -1629,23 +1551,10 @@ endfunction()
 # package metadata object; otherwise ``{}``. The first repository that registered the package wins, which
 # is already reflected by ``cdpm_load_repo``'s first-registration-wins accumulation.
 function(cdpm_find_in_repo pkg_name out_found out_meta_json)
-    set(${out_found} FALSE PARENT_SCOPE)
-    set(${out_meta_json} "{}" PARENT_SCOPE)
-
-    string(TOLOWER "${pkg_name}" name)
-
-    get_property(merged GLOBAL PROPERTY CDPM_MERGED_REPO)
-    if(NOT merged)
-        return()
-    endif()
-
-    string(JSON meta ERROR_VARIABLE meta_err GET "${merged}" "packages" "${name}")
-    if(meta_err)
-        return()
-    endif()
-
-    set(${out_found} TRUE PARENT_SCOPE)
-    set(${out_meta_json} "${meta}" PARENT_SCOPE)
+    _cdpm_registry_find_canonical("${pkg_name}" found meta)
+    set(${out_found} "${found}")
+    set(${out_meta_json} "${meta}")
+    return(PROPAGATE ${out_found} ${out_meta_json})
 endfunction()
 
 # .. rst:

@@ -24,6 +24,16 @@ assert_true("${ok}" "prefix mask matches by prefix")
 _cdpm_pkg_matches_masks("zlib" [=[["boost-*"]]=] ok)
 assert_false("${ok}" "prefix mask does not match unrelated name")
 
+# Prefix text is literal, including regular-expression metacharacters.
+_cdpm_pkg_matches_masks("fmt.core" [=[["fmt.*"]]=] ok)
+assert_true("${ok}" "dot in prefix mask is literal text")
+_cdpm_pkg_matches_masks("fmtxcore" [=[["fmt.*"]]=] ok)
+assert_false("${ok}" "dot in prefix mask is not a regex wildcard")
+_cdpm_pkg_matches_masks("foo[bar" [=[["foo[*"]]=] ok)
+assert_true("${ok}" "opening bracket in prefix mask is literal text")
+_cdpm_pkg_matches_masks("foobar" [=[["foo[*"]]=] ok)
+assert_false("${ok}" "opening bracket in prefix mask is not regex syntax")
+
 # Multiple masks: a hit on any mask is enough.
 _cdpm_pkg_matches_masks("openssl" [=[["boost-*","openssl"]]=] ok)
 assert_true("${ok}" "any matching mask qualifies")

@@ -1,0 +1,28 @@
+include(cdpm_config)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
+
+if(NOT UNIX)
+    message(STATUS "SKIP: POSIX FIFO unavailable")
+    return()
+endif()
+find_program(mkfifo_program NAMES mkfifo NO_CACHE)
+if(NOT mkfifo_program)
+    message(STATUS "SKIP: POSIX FIFO unavailable")
+    return()
+endif()
+set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/root_index_fifo")
+file(REMOVE_RECURSE "${tmp}")
+file(MAKE_DIRECTORY "${tmp}")
+execute_process(COMMAND "${mkfifo_program}" "${tmp}/packages.json" RESULT_VARIABLE fifo_result)
+if(NOT fifo_result EQUAL 0)
+    message(STATUS "SKIP: POSIX FIFO unavailable")
+    return()
+endif()
+
+# The public validator runs the load in a subprocess with a timeout, so a missing pre-read check cannot hang CTest.
+cdpm_validate_registry("${tmp}/packages.json" valid diagnostics)
+assert_false("${valid}" "a FIFO root index is rejected")
+assert_match("${diagnostics}" "expected a regular file" "the root index is rejected before file(READ)")
+
+file(REMOVE_RECURSE "${tmp}")
+message(STATUS "PASS: root packages.json receives regular-file validation before read")

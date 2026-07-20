@@ -1,0 +1,61 @@
+include(cdpm_config)
+include(cdpm_hash)
+include(cdpm_resolve)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
+
+set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/alias_canonical")
+file(REMOVE_RECURSE "${tmp}")
+file(MAKE_DIRECTORY "${tmp}/packages/canonical/patches")
+file(WRITE "${tmp}/packages/canonical/patches/fix.diff" "patch bytes")
+file(WRITE "${tmp}/packages/canonical/package.json" [[{
+"find_package_name":"PublicAlias","source":{"type":"git","url":"https://example.test/canonical.git"},
+"default_version":"1.0.0","versions":{"1.0.0":{"rev":"0123456789abcdef0123456789abcdef01234567",
+"patches":["patches/fix.diff"]}}}]])
+file(WRITE "${tmp}/packages.json"
+    [[{"repo_schema":2,"packages":{"canonical":"packages/canonical/package.json"}}]])
+set_property(GLOBAL PROPERTY CDPM_MERGED_REPO "")
+set_property(GLOBAL PROPERTY CDPM_REPO_PROVENANCE "")
+cdpm_load_repo("${tmp}/packages.json")
+
+cdpm_find_package_in_repo(PublicAlias found package_key meta)
+assert_true("${found}" "schema-2 find_package alias resolves")
+assert_eq("${package_key}" canonical "alias lookup returns the canonical package key")
+_cdpm_registry_get_provenance("${package_key}" provenance_found provenance)
+assert_true("${provenance_found}" "canonical key owns schema-2 provenance")
+_cdpm_registry_get_provenance(PublicAlias alias_provenance_found unused)
+assert_false("${alias_provenance_found}" "alias does not create a second provenance identity")
+_cdpm_registry_resolve_patch_path("${package_key}" "patches/fix.diff" patch)
+assert_eq("${patch}" "${tmp}/packages/canonical/patches/fix.diff"
+    "canonical provenance resolves manifest-relative patches")
+cdpm_compute_config_hash("${package_key}" 1.0.0 "${meta}" hash)
+string(LENGTH "${hash}" hash_length)
+assert_eq("${hash_length}" 16 "canonical package hash has the expected length")
+assert_match("${hash}" [[^[0-9a-f]+$]] "canonical package can hash its manifest-relative patch")
+
+set(CDPM_PROJECT_DIR "${tmp}")
+set(CDPM_STORE_DIR "${tmp}/store")
+set_property(GLOBAL PROPERTY CDPM_CONFIG_LOADED TRUE)
+set_property(GLOBAL PROPERTY CDPM_EFFECTIVE_CONFIG [[{"packages":{},"options":{},"user":{}}]])
+set_property(GLOBAL PROPERTY CDPM_REPO_JSON
+    "{\"repos\":[{\"kind\":\"file\",\"path\":\"${tmp}/packages.json\"}]}")
+function(cdpm_build_dependency pkg version config_hash build_meta)
+    assert_eq("${pkg}" canonical "resolver passes the canonical key to the build and CPS path")
+    _cdpm_registry_resolve_patch_path("${pkg}" "patches/fix.diff" build_patch)
+    assert_eq("${build_patch}" "${tmp}/packages/canonical/patches/fix.diff"
+        "resolver build uses canonical patch provenance")
+    _cdpm_cps_compose("${pkg}" "${version}" "${CDPM_STORE_DIR}/${pkg}/${config_hash}" "${build_meta}" cps)
+    assert_json_member("${cps}" name canonical "CPS identity is canonical")
+endfunction()
+cdpm_resolve_and_build(PublicAlias "" context)
+assert_json_member("${context}" package_key canonical "resolver record identity is canonical")
+assert_json_member("${context}" config_hash "${hash}" "resolver hash uses canonical identity and provenance")
+file(READ "${tmp}/cdpm.lock.json" lock)
+string(JSON canonical_lock ERROR_VARIABLE canonical_lock_err GET "${lock}" packages canonical)
+if(canonical_lock_err)
+    message(FATAL_ERROR "FAIL: resolver lock does not contain canonical package identity")
+endif()
+string(JSON unused ERROR_VARIABLE alias_lock_err GET "${lock}" packages PublicAlias)
+assert_true("${alias_lock_err}" "resolver lock does not contain an alias identity")
+
+file(REMOVE_RECURSE "${tmp}")
+message(STATUS "PASS: schema-2 aliases retain canonical identity and provenance")

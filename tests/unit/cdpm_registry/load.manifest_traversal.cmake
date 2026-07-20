@@ -1,0 +1,8 @@
+include(cdpm_config)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/fixture_helpers.cmake")
+init_registry_fixture(manifest_traversal tmp)
+file(WRITE "${tmp}/packages.json" [[{"repo_schema":2,"packages":{"demo":"packages/../packages/demo/package.json"}}]])
+cdpm_validate_registry("${tmp}/packages.json" valid diagnostics)
+assert_false("${valid}" "manifest traversal fails validation")
+assert_match("${diagnostics}" "must not contain '\.\.'" "the expected containment diagnostic is emitted")

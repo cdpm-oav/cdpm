@@ -9,6 +9,7 @@ cmake_policy(SET CMP0140 NEW)
 include(cdpm_utils)
 include(cdpm_verange)
 include(cdpm_context)
+include(cdpm_registry)
 
 # .. rst:
 # ``_cdpm_hash_compiler_part(<lang> <out_part>)``
@@ -79,11 +80,12 @@ endfunction()
 # Builds the hash contribution for the source patches that *apply to* ``<version>``. The applicable set and
 # its order come from :cmake:command:`cdpm_resolve_patch_list` - the same resolver the build driver uses -
 # so a patch that is scoped out of this version (via ``applies_to``/``exclude``) never perturbs its hash,
-# and a version that does receive a patch is bound to that patch's content. Each existing patch file
-# contributes the SHA-256 of its content, so editing a patch forces a rebuild (mirroring Spack's per-patch
-# sha256 and vcpkg's per-patch ABI entries). Paths are resolved relative to the project directory when not
-# absolute. No applicable patches yields an empty contribution. Apply order is preserved verbatim.
-function(_cdpm_hash_patches_part meta_json version out_part)
+# and a version that does receive a patch is bound to that patch's content. Each applicable patch contributes
+# only the SHA-256 of its content, so editing a patch forces a rebuild (mirroring Spack's per-patch sha256 and
+# vcpkg's per-patch ABI entries) while keeping the hash independent of representation-specific paths. Relative
+# paths use the schema-specific origin shared with the build path. No applicable patches yields an empty
+# contribution. Apply order is preserved verbatim.
+function(_cdpm_hash_patches_part pkg_name meta_json version out_part)
     set(result "")
 
     if(meta_json STREQUAL "" OR version STREQUAL "")
@@ -100,22 +102,18 @@ function(_cdpm_hash_patches_part meta_json version out_part)
     endif()
 
     set(parts "")
-    _cdpm_resolve_project_dir(project_dir)
     math(EXPR last "${count} - 1")
     foreach(i RANGE 0 ${last})
         string(JSON patch_path GET "${patches}" ${i})
 
-        set(resolved "${patch_path}")
-        if(NOT IS_ABSOLUTE "${resolved}")
-            cmake_path(ABSOLUTE_PATH resolved BASE_DIRECTORY "${project_dir}" NORMALIZE OUTPUT_VARIABLE resolved)
-        endif()
+        _cdpm_registry_resolve_patch_path("${pkg_name}" "${patch_path}" resolved)
 
         if(EXISTS "${resolved}" AND NOT IS_DIRECTORY "${resolved}")
             file(SHA256 "${resolved}" patch_hash)
-            list(APPEND parts "${patch_path}=${patch_hash}")
+            list(APPEND parts "${patch_hash}")
         else()
-            # Keep the declared path so an unresolved patch still perturbs the hash deterministically.
-            list(APPEND parts "${patch_path}=missing")
+            # An unresolved patch still perturbs the hash deterministically.
+            list(APPEND parts "missing")
         endif()
     endforeach()
 
@@ -208,7 +206,7 @@ function(cdpm_compute_config_hash pkg_name pkg_version meta_json out_hash)
     endif()
 
     # ---- Source patches ---------------------------------------------------------
-    _cdpm_hash_patches_part("${meta_json}" "${pkg_version}" patches_part)
+    _cdpm_hash_patches_part("${name}" "${meta_json}" "${pkg_version}" patches_part)
     if(NOT patches_part STREQUAL "")
         string(APPEND parts "|patches:${patches_part}")
     endif()

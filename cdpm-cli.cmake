@@ -347,6 +347,15 @@ elseif(__CDPM_COMMAND STREQUAL "add-registry")
     endif()
     cdpm_cmd_add_registry("${__CDPM_REG_PATH}" "${__CDPM_REG_SCOPE}")
 
+# ---- validate-registry <path> ---------------------------------------------
+elseif(__CDPM_COMMAND STREQUAL "validate-registry")
+    if(NOT __CDPM_NARGS EQUAL 2)
+        message(FATAL_ERROR "[cdpm] 'validate-registry' requires exactly one path.\n"
+            "Usage: cmake -P cdpm-cli.cmake -- validate-registry <registry-dir|packages.json>")
+    endif()
+    list(GET CDPM_CLI_ARGS 1 __CDPM_REG_PATH)
+    cdpm_cmd_validate_registry("${__CDPM_REG_PATH}")
+
 # ---- config <subcommand> --------------------------------------------------
 elseif(__CDPM_COMMAND STREQUAL "config")
     if(__CDPM_NARGS LESS 2)
