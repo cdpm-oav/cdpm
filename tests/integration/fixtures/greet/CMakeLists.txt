@@ -19,3 +19,8 @@ install(EXPORT greetTargets
     NAMESPACE greet::
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/greet
 )
+
+if(DEFINED CDPM_ROUNDTRIP)
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/roundtrip.txt" "${CDPM_ROUNDTRIP}")
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/roundtrip.txt" DESTINATION .)
+endif()

@@ -1,0 +1,16 @@
+cmake_policy(SET CMP0011 NEW)
+include(cdpm_lockfile)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
+set(CDPM_PROJECT_DIR "${CMAKE_CURRENT_LIST_DIR}/.tmp/graph")
+file(REMOVE_RECURSE "${CDPM_PROJECT_DIR}")
+file(MAKE_DIRECTORY "${CDPM_PROJECT_DIR}")
+cdpm_write_lockfile(parent 1 hash "{}" FALSE
+    DEPENDENCIES [[{"leaf":{"version":"1","config_hash":"abc"}}]]
+    SYSTEM_IDENTITIES [[{"Fake":{"definition_sha256":"def"}}]])
+file(READ "${CDPM_PROJECT_DIR}/cdpm.lock.json" lock)
+string(JSON dependencies GET "${lock}" packages parent dependencies)
+string(JSON systems GET "${lock}" packages parent system_dependencies)
+assert_json_eq("${dependencies}" [[{"leaf":{"config_hash":"abc","version":"1"}}]] "managed graph identity")
+assert_json_eq("${systems}" [[{"Fake":{"definition_sha256":"def"}}]] "system graph identity")
+file(REMOVE_RECURSE "${CDPM_PROJECT_DIR}")
+message(STATUS "PASS: write.graph_identities")

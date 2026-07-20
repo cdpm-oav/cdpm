@@ -13,7 +13,8 @@
 #         "source_url": "...",          # git + url sources
 #         "git_commit": "...",          # git sources only
 #         "source_sha256": "...",       # url sources only
-#         "dependencies": {},           # resolved transitive slice (v1: empty)
+#         "dependencies": {},           # direct managed identity map
+#         "system_dependencies": {},    # direct system identity map, when declared
 #         "dev": false                  # true when a local source_override is in effect
 #       }
 #     },
@@ -26,17 +27,20 @@
 include_guard(GLOBAL)
 
 cmake_policy(SET CMP0140 NEW)
+cmake_policy(SET CMP0057 NEW)
 
 # Canonical JSON + the type-safe JSON setter (booleans, string quoting) live in cdpm_config.
 include(cdpm_config)
 include(cdpm_version)
+include(cdpm_context)
 
 # .. rst:
 # ``_cdpm_lockfile_default_path(<out_var>)``
 #
-# Returns the default lockfile path (``${CMAKE_SOURCE_DIR}/cdpm.lock.json``).
+# Returns the default lockfile path (``<project>/cdpm.lock.json``).
 function(_cdpm_lockfile_default_path out_var)
-    set(${out_var} "${CMAKE_SOURCE_DIR}/cdpm.lock.json")
+    _cdpm_resolve_project_dir(project_dir)
+    set(${out_var} "${project_dir}/cdpm.lock.json")
     return(PROPAGATE ${out_var})
 endfunction()
 
@@ -56,10 +60,109 @@ function(_cdpm_lockfile_skeleton out_json)
     return(PROPAGATE ${out_json})
 endfunction()
 
+# Validates the structural lock schema without imposing source reproducibility policy.
+function(_cdpm_lockfile_validate lock path)
+    string(JSON lock_type ERROR_VARIABLE lock_type_err TYPE "${lock}")
+    if(lock_type_err OR NOT lock_type STREQUAL "OBJECT")
+        message(FATAL_ERROR "[cdpm] lockfile '${path}' must be a JSON object.")
+    endif()
+    string(JSON schema ERROR_VARIABLE schema_err GET "${lock}" lock_schema)
+    string(JSON schema_type ERROR_VARIABLE schema_type_err TYPE "${lock}" lock_schema)
+    if(schema_err OR schema_type_err OR NOT schema_type STREQUAL "NUMBER" OR NOT schema EQUAL 1)
+        message(FATAL_ERROR "[cdpm] lockfile '${path}': lock_schema must be the number 1.")
+    endif()
+    string(JSON packages_type ERROR_VARIABLE packages_err TYPE "${lock}" packages)
+    if(packages_err OR NOT packages_type STREQUAL "OBJECT")
+        message(FATAL_ERROR "[cdpm] lockfile '${path}': packages must be an object.")
+    endif()
+    string(JSON packages GET "${lock}" packages)
+    _cdpm_json_foreach("${packages}" package_names)
+    foreach(package_name IN LISTS package_names)
+        string(JSON entry_type TYPE "${packages}" "${package_name}")
+        if(NOT entry_type STREQUAL "OBJECT")
+            message(FATAL_ERROR "[cdpm] lockfile '${path}': package '${package_name}' entry must be an object.")
+        endif()
+        string(JSON entry GET "${packages}" "${package_name}")
+        foreach(field IN ITEMS version config_hash)
+            string(JSON value ERROR_VARIABLE value_err GET "${entry}" "${field}")
+            string(JSON value_type ERROR_VARIABLE value_type_err TYPE "${entry}" "${field}")
+            if(value_err OR value_type_err OR NOT value_type STREQUAL "STRING" OR value STREQUAL "")
+                message(FATAL_ERROR "[cdpm] lockfile '${path}': package '${package_name}.${field}' must be a "
+                    "non-empty string.")
+            endif()
+        endforeach()
+        string(JSON dependencies_type ERROR_VARIABLE dependencies_err TYPE "${entry}" dependencies)
+        if(dependencies_err OR NOT dependencies_type STREQUAL "OBJECT")
+            message(FATAL_ERROR "[cdpm] lockfile '${path}': package '${package_name}.dependencies' must be an object.")
+        endif()
+        string(JSON dev_type ERROR_VARIABLE dev_err TYPE "${entry}" dev)
+        if(dev_err OR NOT dev_type STREQUAL "BOOLEAN")
+            message(FATAL_ERROR "[cdpm] lockfile '${path}': package '${package_name}.dev' must be a boolean.")
+        endif()
+        string(JSON system_type ERROR_VARIABLE system_err TYPE "${entry}" system_dependencies)
+        if(NOT system_err AND NOT system_type STREQUAL "OBJECT")
+            message(FATAL_ERROR "[cdpm] lockfile '${path}': package '${package_name}.system_dependencies' must "
+                "be an object.")
+        endif()
+
+        string(JSON dependencies GET "${entry}" dependencies)
+        _cdpm_json_foreach("${dependencies}" dependency_names)
+        foreach(dependency_name IN LISTS dependency_names)
+            string(JSON identity_type TYPE "${dependencies}" "${dependency_name}")
+            if(NOT identity_type STREQUAL "OBJECT")
+                message(FATAL_ERROR "[cdpm] lockfile '${path}': dependency identity '${package_name}."
+                    "${dependency_name}' must be an object.")
+            endif()
+            string(JSON identity GET "${dependencies}" "${dependency_name}")
+            foreach(field IN ITEMS package version config_hash)
+                string(JSON value ERROR_VARIABLE value_err GET "${identity}" "${field}")
+                string(JSON value_type ERROR_VARIABLE value_type_err TYPE "${identity}" "${field}")
+                if(value_err OR value_type_err OR NOT value_type STREQUAL "STRING" OR value STREQUAL "")
+                    message(FATAL_ERROR "[cdpm] lockfile '${path}': dependency identity '${package_name}."
+                        "${dependency_name}.${field}' must be a non-empty string.")
+                endif()
+            endforeach()
+            string(JSON components_type ERROR_VARIABLE components_err TYPE "${identity}" components)
+            if(NOT components_err AND NOT components_type STREQUAL "ARRAY")
+                message(FATAL_ERROR "[cdpm] lockfile '${path}': dependency identity '${package_name}."
+                    "${dependency_name}.components' must be an array.")
+            endif()
+        endforeach()
+    endforeach()
+
+    string(JSON repos_type ERROR_VARIABLE repos_err TYPE "${lock}" repos)
+    if(repos_err OR NOT repos_type STREQUAL "ARRAY")
+        message(FATAL_ERROR "[cdpm] lockfile '${path}': repos must be an array.")
+    endif()
+    string(JSON repo_count LENGTH "${lock}" repos)
+    if(repo_count GREATER 0)
+        math(EXPR repo_last "${repo_count} - 1")
+        foreach(i RANGE 0 ${repo_last})
+            string(JSON repo_type TYPE "${lock}" repos ${i})
+            if(NOT repo_type STREQUAL "OBJECT")
+                message(FATAL_ERROR "[cdpm] lockfile '${path}': repos[${i}] must be an object.")
+            endif()
+            foreach(field IN ITEMS url baseline)
+                string(JSON value ERROR_VARIABLE value_err GET "${lock}" repos ${i} "${field}")
+                string(JSON value_type ERROR_VARIABLE value_type_err TYPE "${lock}" repos ${i} "${field}")
+                if(value_err OR value_type_err OR NOT value_type STREQUAL "STRING" OR value STREQUAL "")
+                    message(FATAL_ERROR "[cdpm] lockfile '${path}': repos[${i}].${field} must be a non-empty string.")
+                endif()
+                if(field STREQUAL "baseline")
+                    string(LENGTH "${value}" baseline_length)
+                    if(NOT baseline_length EQUAL 40 OR NOT value MATCHES [[^[0-9a-fA-F]+$]])
+                        message(FATAL_ERROR "[cdpm] lockfile '${path}': repos[${i}].baseline must be a 40-hex SHA.")
+                    endif()
+                endif()
+            endforeach()
+        endforeach()
+    endif()
+endfunction()
+
 # .. rst:
 # ``cdpm_read_lockfile([PATH <path>])``
 #
-# Loads the lockfile from ``<path>`` (default ``${CMAKE_SOURCE_DIR}/cdpm.lock.json``) and caches its JSON
+# Loads the lockfile from ``<path>`` (default ``<project>/cdpm.lock.json``) and caches its JSON
 # string in the ``CDPM_LOCKFILE_JSON`` global property, with the resolved path in ``CDPM_LOCKFILE_PATH`` and
 # a ``CDPM_LOCKFILE_LOADED`` guard. A missing file is not an error: the cache is seeded with the empty
 # schema skeleton so writers can extend it. Malformed JSON is fatal.
@@ -74,10 +177,7 @@ function(cdpm_read_lockfile)
 
     if(EXISTS "${path}")
         file(READ "${path}" content)
-        string(JSON type ERROR_VARIABLE type_err TYPE "${content}")
-        if(type_err OR NOT type STREQUAL "OBJECT")
-            message(FATAL_ERROR "[cdpm] lockfile '${path}' is not a JSON object: ${type_err}")
-        endif()
+        _cdpm_lockfile_validate("${content}" "${path}")
     else()
         _cdpm_lockfile_skeleton(content)
     endif()
@@ -85,6 +185,39 @@ function(cdpm_read_lockfile)
     set_property(GLOBAL PROPERTY CDPM_LOCKFILE_JSON "${content}")
     set_property(GLOBAL PROPERTY CDPM_LOCKFILE_PATH "${path}")
     set_property(GLOBAL PROPERTY CDPM_LOCKFILE_LOADED TRUE)
+endfunction()
+
+# Returns graph roots and rejects dangling dependency references or a non-empty rootless graph.
+function(_cdpm_lockfile_get_roots lock out_roots)
+    string(JSON packages GET "${lock}" packages)
+    _cdpm_json_foreach("${packages}" package_names)
+    set(child_names "")
+    foreach(package_name IN LISTS package_names)
+        string(JSON dependencies GET "${packages}" "${package_name}" dependencies)
+        _cdpm_json_foreach("${dependencies}" dependency_names)
+        foreach(dependency_name IN LISTS dependency_names)
+            string(JSON child_name GET "${dependencies}" "${dependency_name}" package)
+            string(TOLOWER "${child_name}" child_name)
+            string(JSON child_entry ERROR_VARIABLE child_err GET "${packages}" "${child_name}")
+            if(child_err)
+                message(FATAL_ERROR "[cdpm] lockfile dependency '${package_name}' references missing package "
+                    "'${child_name}'.")
+            endif()
+            list(APPEND child_names "${child_name}")
+        endforeach()
+    endforeach()
+    list(REMOVE_DUPLICATES child_names)
+    set(roots "")
+    foreach(package_name IN LISTS package_names)
+        if(NOT package_name IN_LIST child_names)
+            list(APPEND roots "${package_name}")
+        endif()
+    endforeach()
+    if(package_names AND NOT roots)
+        message(FATAL_ERROR "[cdpm] lockfile graph has no roots; it is cyclic or malformed.")
+    endif()
+    set(${out_roots} "${roots}")
+    return(PROPAGATE ${out_roots})
 endfunction()
 
 # .. rst:
@@ -128,7 +261,126 @@ function(cdpm_lockfile_get pkg_name out_found out_entry_json)
 endfunction()
 
 # .. rst:
-# ``cdpm_write_lockfile(<pkg_name> <version> <config_hash> <source_json> <dev>)``
+# ``_cdpm_lockfile_compose_entry(<version> <hash> <source_json> <dev> <out_entry>
+#                                [DEPENDENCIES <json>] [SYSTEM_IDENTITIES <json>])``
+function(_cdpm_lockfile_compose_entry version config_hash source_json dev out_entry)
+    cmake_parse_arguments(arg "" "DEPENDENCIES;SYSTEM_IDENTITIES" "" ${ARGN})
+    set(entry "{}")
+    _cdpm_json_set_safe("${entry}" version "${version}" STRING entry)
+    _cdpm_json_set_safe("${entry}" config_hash "${config_hash}" STRING entry)
+
+    string(JSON src_kind ERROR_VARIABLE src_kind_err GET "${source_json}" type)
+    if(NOT src_kind_err)
+        if(src_kind STREQUAL "local")
+            set(dev TRUE)
+        elseif(src_kind STREQUAL "git")
+            string(JSON url ERROR_VARIABLE url_err GET "${source_json}" url)
+            string(JSON rev ERROR_VARIABLE rev_err GET "${source_json}" rev)
+            if(NOT url_err)
+                _cdpm_json_set_safe("${entry}" source_url "${url}" STRING entry)
+            endif()
+            if(NOT rev_err)
+                _cdpm_json_set_safe("${entry}" git_commit "${rev}" STRING entry)
+            endif()
+        elseif(src_kind STREQUAL "url")
+            string(JSON url ERROR_VARIABLE url_err GET "${source_json}" url)
+            string(JSON sha ERROR_VARIABLE sha_err GET "${source_json}" sha256)
+            if(NOT url_err)
+                _cdpm_json_set_safe("${entry}" source_url "${url}" STRING entry)
+            endif()
+            if(NOT sha_err)
+                _cdpm_json_set_safe("${entry}" source_sha256 "${sha}" STRING entry)
+            endif()
+        endif()
+    endif()
+
+    if(DEFINED arg_DEPENDENCIES)
+        cdpm_canonical_json("${arg_DEPENDENCIES}" dependencies)
+        string(JSON entry SET "${entry}" dependencies "${dependencies}")
+    else()
+        string(JSON entry SET "${entry}" dependencies "{}")
+    endif()
+    if(DEFINED arg_SYSTEM_IDENTITIES)
+        cdpm_canonical_json("${arg_SYSTEM_IDENTITIES}" system_identities)
+        string(JSON entry SET "${entry}" system_dependencies "${system_identities}")
+    endif()
+    _cdpm_json_set_safe("${entry}" dev "${dev}" BOOLEAN entry)
+    cdpm_canonical_json("${entry}" entry)
+    set(${out_entry} "${entry}")
+    return(PROPAGATE ${out_entry})
+endfunction()
+
+function(_cdpm_lockfile_persist lock)
+    get_property(path GLOBAL PROPERTY CDPM_LOCKFILE_PATH)
+    if(NOT path)
+        _cdpm_lockfile_default_path(path)
+    endif()
+    cmake_path(GET path PARENT_PATH parent)
+    file(MAKE_DIRECTORY "${parent}")
+    set(temporary "${path}.tmp")
+    file(WRITE "${temporary}" "${lock}\n")
+    file(RENAME "${temporary}" "${path}")
+    set_property(GLOBAL PROPERTY CDPM_LOCKFILE_JSON "${lock}")
+endfunction()
+
+# Atomically merges a package-entry map into the loaded lockfile in one write.
+function(_cdpm_lockfile_commit_entries entries)
+    cmake_parse_arguments(arg "" "REPOS" "" ${ARGN})
+    _cdpm_lockfile_ensure_loaded()
+    get_property(lock GLOBAL PROPERTY CDPM_LOCKFILE_JSON)
+    if(NOT lock)
+        _cdpm_lockfile_skeleton(lock)
+    endif()
+    _cdpm_json_foreach("${entries}" package_names)
+    foreach(package_name IN LISTS package_names)
+        string(JSON entry GET "${entries}" "${package_name}")
+        string(JSON lock SET "${lock}" packages "${package_name}" "${entry}")
+    endforeach()
+    if(DEFINED arg_REPOS)
+        string(JSON lock SET "${lock}" repos "${arg_REPOS}")
+    endif()
+    cdpm_canonical_json("${lock}" lock)
+    _cdpm_lockfile_persist("${lock}")
+endfunction()
+
+# Returns the canonical configured git repository pins. File repositories are intentionally omitted.
+function(_cdpm_lockfile_collect_git_repos out_repos)
+    get_property(repo_json GLOBAL PROPERTY CDPM_REPO_JSON)
+    set(result "[]")
+    if(repo_json)
+        string(JSON repos ERROR_VARIABLE repos_err GET "${repo_json}" repos)
+        if(NOT repos_err)
+            string(JSON repo_count LENGTH "${repos}")
+            if(repo_count GREATER 0)
+                math(EXPR repo_last "${repo_count} - 1")
+                foreach(i RANGE 0 ${repo_last})
+                    string(JSON repo GET "${repos}" ${i})
+                    string(JSON kind ERROR_VARIABLE kind_err GET "${repo}" kind)
+                    if(kind_err OR NOT kind STREQUAL "git")
+                        continue()
+                    endif()
+                    string(JSON url ERROR_VARIABLE url_err GET "${repo}" url)
+                    string(JSON baseline ERROR_VARIABLE baseline_err GET "${repo}" baseline)
+                    if(url_err OR baseline_err)
+                        continue()
+                    endif()
+                    set(pin "{}")
+                    _cdpm_json_set_safe("${pin}" url "${url}" STRING pin)
+                    _cdpm_json_set_safe("${pin}" baseline "${baseline}" STRING pin)
+                    string(JSON result_length LENGTH "${result}")
+                    string(JSON result SET "${result}" ${result_length} "${pin}")
+                endforeach()
+            endif()
+        endif()
+    endif()
+    cdpm_canonical_json("${result}" result)
+    set(${out_repos} "${result}")
+    return(PROPAGATE ${out_repos})
+endfunction()
+
+# .. rst:
+# ``cdpm_write_lockfile(<pkg_name> <version> <config_hash> <source_json> <dev>
+#                      [DEPENDENCIES <json>] [SYSTEM_IDENTITIES <json>])``
 #
 # Records (or replaces) the ``<pkg_name>`` entry in the lockfile and persists the file. ``<source_json>`` is
 # the normalized source object from :cmake:command:`cdpm_get_package_source` /
@@ -138,66 +390,24 @@ endfunction()
 # * ``url``   -> ``source_url`` + ``source_sha256`` (from ``url`` / ``sha256``);
 # * ``local`` -> no integrity fields (a dev source is not reproducible).
 #
-# ``<dev>`` (the ``out_dev`` flag) is stored verbatim as a JSON boolean. ``dependencies`` is written as an
-# empty object in v1 (the resolved transitive slice lands with transitive-dependency support). The file is
-# rewritten in canonical form (sorted keys) for clean VCS diffs. Loads the lockfile on demand first.
+# ``<dev>`` is stored verbatim as a JSON boolean. Optional identity maps are canonicalized. The file is
+# rewritten atomically in canonical form (sorted keys) for clean VCS diffs. Loads the lockfile on demand.
 function(cdpm_write_lockfile pkg_name version config_hash source_json dev)
+    cmake_parse_arguments(arg "" "DEPENDENCIES;SYSTEM_IDENTITIES" "" ${ARGN})
     _cdpm_lockfile_ensure_loaded()
     string(TOLOWER "${pkg_name}" name)
-
-    get_property(lock GLOBAL PROPERTY CDPM_LOCKFILE_JSON)
-    if(NOT lock)
-        _cdpm_lockfile_skeleton(lock)
+    set(compose_args "")
+    if(DEFINED arg_DEPENDENCIES)
+        list(APPEND compose_args DEPENDENCIES "${arg_DEPENDENCIES}")
     endif()
-
-    # Build the package entry.
-    set(entry "{}")
-    _cdpm_json_set_safe("${entry}" "version"      "${version}"     "STRING" entry)
-    _cdpm_json_set_safe("${entry}" "config_hash"  "${config_hash}" "STRING" entry)
-
-    string(JSON src_type ERROR_VARIABLE st_err TYPE "${source_json}")
-    if(NOT st_err)
-        string(JSON src_kind ERROR_VARIABLE sk_err GET "${source_json}" "type")
-        if(sk_err)
-            set(src_kind "")
-        endif()
-
-        if(src_kind STREQUAL "git")
-            string(JSON url ERROR_VARIABLE u_err GET "${source_json}" "url")
-            string(JSON rev ERROR_VARIABLE r_err GET "${source_json}" "rev")
-            if(NOT u_err)
-                _cdpm_json_set_safe("${entry}" "source_url" "${url}" "STRING" entry)
-            endif()
-            if(NOT r_err)
-                _cdpm_json_set_safe("${entry}" "git_commit" "${rev}" "STRING" entry)
-            endif()
-        elseif(src_kind STREQUAL "url")
-            string(JSON url ERROR_VARIABLE u_err GET "${source_json}" "url")
-            string(JSON sha ERROR_VARIABLE s_err GET "${source_json}" "sha256")
-            if(NOT u_err)
-                _cdpm_json_set_safe("${entry}" "source_url" "${url}" "STRING" entry)
-            endif()
-            if(NOT s_err)
-                _cdpm_json_set_safe("${entry}" "source_sha256" "${sha}" "STRING" entry)
-            endif()
-        endif()
-        # local: no integrity fields recorded (dev sources are not reproducible).
+    if(DEFINED arg_SYSTEM_IDENTITIES)
+        list(APPEND compose_args SYSTEM_IDENTITIES "${arg_SYSTEM_IDENTITIES}")
     endif()
-
-    string(JSON entry SET "${entry}" "dependencies" "{}")
-    _cdpm_json_set_safe("${entry}" "dev" "${dev}" "BOOLEAN" entry)
-
-    # Merge the entry into the packages object and persist.
-    string(JSON lock SET "${lock}" "packages" "${name}" "${entry}")
-    cdpm_canonical_json("${lock}" lock)
-
-    get_property(path GLOBAL PROPERTY CDPM_LOCKFILE_PATH)
-    if(NOT path)
-        _cdpm_lockfile_default_path(path)
-    endif()
-    file(WRITE "${path}" "${lock}\n")
-
-    set_property(GLOBAL PROPERTY CDPM_LOCKFILE_JSON "${lock}")
+    _cdpm_lockfile_compose_entry("${version}" "${config_hash}" "${source_json}" "${dev}" entry
+        ${compose_args})
+    set(entries "{}")
+    string(JSON entries SET "${entries}" "${name}" "${entry}")
+    _cdpm_lockfile_commit_entries("${entries}")
 endfunction()
 
 # .. rst:
@@ -209,57 +419,18 @@ endfunction()
 # declared. Loads the lockfile on demand first.
 function(cdpm_lockfile_record_repos)
     _cdpm_lockfile_ensure_loaded()
-
-    get_property(repo_json GLOBAL PROPERTY CDPM_REPO_JSON)
-    if(NOT repo_json)
-        return()
-    endif()
-
-    string(JSON repos ERROR_VARIABLE repos_err GET "${repo_json}" "repos")
-    if(repos_err)
-        return()
-    endif()
-    string(JSON repos_len ERROR_VARIABLE len_err LENGTH "${repos}")
-    if(len_err OR repos_len EQUAL 0)
-        return()
-    endif()
-
-    set(out_repos "[]")
-    math(EXPR last "${repos_len} - 1")
-    foreach(i RANGE 0 ${last})
-        string(JSON entry GET "${repos}" ${i})
-
-        string(JSON kind ERROR_VARIABLE kind_err GET "${entry}" "kind")
-        if(kind_err OR NOT kind STREQUAL "git")
-            continue()
-        endif()
-
-        string(JSON url ERROR_VARIABLE u_err GET "${entry}" "url")
-        string(JSON baseline ERROR_VARIABLE b_err GET "${entry}" "baseline")
-        if(u_err OR b_err)
-            continue()
-        endif()
-
-        set(rec "{}")
-        _cdpm_json_set_safe("${rec}" "url" "${url}" "STRING" rec)
-        _cdpm_json_set_safe("${rec}" "baseline" "${baseline}" "STRING" rec)
-
-        string(JSON out_len LENGTH "${out_repos}")
-        string(JSON out_repos SET "${out_repos}" ${out_len} "${rec}")
-    endforeach()
+    _cdpm_lockfile_collect_git_repos(out_repos)
 
     get_property(lock GLOBAL PROPERTY CDPM_LOCKFILE_JSON)
     if(NOT lock)
         _cdpm_lockfile_skeleton(lock)
     endif()
-    string(JSON lock SET "${lock}" "repos" "${out_repos}")
+    string(JSON lock SET "${lock}" repos "${out_repos}")
     cdpm_canonical_json("${lock}" lock)
 
     get_property(path GLOBAL PROPERTY CDPM_LOCKFILE_PATH)
     if(NOT path)
         _cdpm_lockfile_default_path(path)
     endif()
-    file(WRITE "${path}" "${lock}\n")
-
-    set_property(GLOBAL PROPERTY CDPM_LOCKFILE_JSON "${lock}")
+    _cdpm_lockfile_persist("${lock}")
 endfunction()

@@ -94,6 +94,18 @@ endif()
 file(GLOB_RECURSE greet_cfg "${greet_slot}/greetConfig.cmake")
 assert_ne("${greet_cfg}" "" "greetConfig.cmake was installed by the provider")
 
+# Provider/library mode keeps its historical build-tree runtime default and never adopts the CLI store
+# fallback. The generated user file is removed after the successful dependency build.
+set(provider_runtime "${consumer_build}/.cdpm")
+if(NOT IS_DIRECTORY "${provider_runtime}")
+    message(FATAL_ERROR "FAIL: provider runtime is not under the consumer build: ${provider_runtime}")
+endif()
+if(EXISTS "${store}/.runtime")
+    message(FATAL_ERROR "FAIL: provider unexpectedly created CLI runtime under the store")
+endif()
+file(GLOB provider_user_files "${provider_runtime}/user/*.cmake")
+assert_eq("${provider_user_files}" "" "provider removes generated user files after successful builds")
+
 # The provider must have written a lockfile next to the consumer's source with a greet entry whose
 # config_hash matches the installed store slot, and dev:true (the fixture uses a local source_override).
 set(lockfile "${consumer}/cdpm.lock.json")
@@ -164,6 +176,38 @@ endif()
 string(FIND "${err3}${out3}" "CDPM_ALLOW_SYSTEM_PACKAGES" gate_hint)
 if(gate_hint EQUAL -1)
     message(FATAL_ERROR "FAIL: fatal message should mention the CDPM_ALLOW_SYSTEM_PACKAGES gate.\n${err3}")
+endif()
+
+# A strict provider can materialize a pinned local git registry without recursively asking itself for Git.
+find_program(git_executable NAMES git REQUIRED)
+set(git_registry "${tmp}/git-registry")
+file(MAKE_DIRECTORY "${git_registry}")
+file(WRITE "${git_registry}/packages.json" [[{"repo_schema":1,"packages":{}}]])
+execute_process(COMMAND "${git_executable}" init -q WORKING_DIRECTORY "${git_registry}"
+    COMMAND_ERROR_IS_FATAL ANY)
+execute_process(COMMAND "${git_executable}" add packages.json WORKING_DIRECTORY "${git_registry}"
+    COMMAND_ERROR_IS_FATAL ANY)
+execute_process(COMMAND "${git_executable}" -c user.name=cdpm-test -c user.email=cdpm@example.invalid
+        commit -q -m baseline
+    WORKING_DIRECTORY "${git_registry}" COMMAND_ERROR_IS_FATAL ANY)
+execute_process(COMMAND "${git_executable}" rev-parse HEAD WORKING_DIRECTORY "${git_registry}"
+    OUTPUT_VARIABLE git_baseline OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+set(git_config "${tmp}/git-cdpm.json")
+file(WRITE "${git_config}" "{\"repos\":[{\"kind\":\"git\",\"url\":\"${git_registry}\","
+    "\"baseline\":\"${git_baseline}\"}]}")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -S "${unknown_consumer}" -B "${tmp}/git-provider-build" ${gen_args}
+        "-DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=${cdpm_entry}"
+        "-DCDPM_STORE_DIR=${tmp}/git-store" "-DCDPM_PROJECT_CONFIG=${git_config}"
+        -DCDPM_ALLOW_SYSTEM_PACKAGES=OFF
+    RESULT_VARIABLE git_provider_rc OUTPUT_VARIABLE git_provider_out ERROR_VARIABLE git_provider_err
+)
+if(git_provider_rc EQUAL 0 OR NOT "${git_provider_out}${git_provider_err}" MATCHES "not found in any loaded")
+    message(FATAL_ERROR "FAIL: strict provider did not reach normal package lookup with a git registry\n"
+        "${git_provider_out}${git_provider_err}")
+endif()
+if(NOT EXISTS "${tmp}/git-store/repos/${git_baseline}/packages.json")
+    message(FATAL_ERROR "FAIL: strict provider did not materialize the pinned local git registry")
 endif()
 
 file(REMOVE_RECURSE "${tmp}")

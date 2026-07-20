@@ -1,0 +1,13 @@
+cmake_policy(SET CMP0011 NEW)
+include(cdpm_lockfile)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
+
+set(CDPM_PROJECT_DIR "${CMAKE_CURRENT_LIST_DIR}/.tmp/local-is-dev")
+file(REMOVE_RECURSE "${CDPM_PROJECT_DIR}")
+file(MAKE_DIRECTORY "${CDPM_PROJECT_DIR}")
+cdpm_write_lockfile(local 1 hash [[{"type":"local","url":"/source"}]] FALSE)
+file(READ "${CDPM_PROJECT_DIR}/cdpm.lock.json" lock)
+string(JSON entry GET "${lock}" packages local)
+assert_json_member("${entry}" dev ON "normal local source is always non-reproducible")
+file(REMOVE_RECURSE "${CDPM_PROJECT_DIR}")
+message(STATUS "PASS: write.local_is_dev")
