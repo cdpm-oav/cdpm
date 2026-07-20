@@ -13,6 +13,7 @@ include_guard(GLOBAL)
 # pass through verbatim. Build with ``make`` (Unix) or ``nmake`` (Windows, possibly with nasm). Tools are
 # located via ``find_program``; all steps via ``execute_process``.
 function(cdpm_bs_openssl_build ctx_json)
+    _cdpm_cleanup_driver_user_file("${ctx_json}")
     message(FATAL_ERROR
         "[cdpm] build-system driver 'openssl' is not yet implemented. "
         "Only the 'cmake' driver is available in this version."

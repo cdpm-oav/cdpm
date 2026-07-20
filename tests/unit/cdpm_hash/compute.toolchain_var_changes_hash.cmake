@@ -18,4 +18,10 @@ cdpm_compute_config_hash("fmt" "10.2.1" "{}" h_abi2)
 
 assert_ne("${h_abi1}" "${h_abi2}" "changing ANDROID_ABI changes the hash")
 
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+cdpm_compute_config_hash("fmt" "10.2.1" "{}" h_root_mode1)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY NEVER)
+cdpm_compute_config_hash("fmt" "10.2.1" "{}" h_root_mode2)
+assert_ne("${h_root_mode1}" "${h_root_mode2}" "changing a root-path mode changes the hash")
+
 message(STATUS "PASS: frozen toolchain variables participate in the config hash")

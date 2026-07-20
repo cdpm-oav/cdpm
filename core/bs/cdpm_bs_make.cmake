@@ -12,6 +12,7 @@ include_guard(GLOBAL)
 # variables. On Windows + NMake the driver must enter the Visual Studio environment (vcvarsall via
 # vswhere) - the single, isolated place where a platform-specific shell call is permitted.
 function(cdpm_bs_make_build ctx_json)
+    _cdpm_cleanup_driver_user_file("${ctx_json}")
     message(FATAL_ERROR
         "[cdpm] build-system driver 'make' is not yet implemented. "
         "Only the 'cmake' driver is available in this version."

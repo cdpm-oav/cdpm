@@ -13,6 +13,7 @@ include_guard(GLOBAL)
 # ``CDPM_PKG_OPTIONS_JSON`` and the ``CDPM_USER_*`` variables, and performs configure/build/install
 # through ``execute_process``.
 function(cdpm_bs_custom_build ctx_json)
+    _cdpm_cleanup_driver_user_file("${ctx_json}")
     message(FATAL_ERROR
         "[cdpm] build-system driver 'custom' is not yet implemented. "
         "Only the 'cmake' driver is available in this version."

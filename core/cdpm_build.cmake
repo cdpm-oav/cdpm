@@ -11,11 +11,24 @@ include(cdpm_config)
 include(cdpm_toolchain)
 include(cdpm_hash)
 include(cdpm_cps)
+include(cdpm_context)
 
 # cdpm root (parent of core/) captured at include time. Driver module paths from the
 # registry are relative to this root (e.g. core/bs/cdpm_bs_cmake.cmake).
 cmake_path(GET CMAKE_CURRENT_LIST_DIR PARENT_PATH __CDPM_BUILD_ROOT)
 set(__CDPM_BUILD_ROOT "${__CDPM_BUILD_ROOT}" CACHE INTERNAL "cdpm root dir for build drivers")
+
+# .. rst:
+# ``_cdpm_cleanup_driver_user_file(<ctx_json>)``
+#
+# Removes the generated user key-value file from a driver context. Drivers must call this immediately
+# before every ``FATAL_ERROR`` so tracked and untracked values do not remain on disk after a failed build.
+function(_cdpm_cleanup_driver_user_file ctx_json)
+    string(JSON user_file ERROR_VARIABLE user_file_err GET "${ctx_json}" "user_file")
+    if(NOT user_file_err AND NOT user_file STREQUAL "")
+        file(REMOVE "${user_file}")
+    endif()
+endfunction()
 
 # .. rst:
 # ``cdpm_prepare_source(<pkg_name> <pkg_version> <meta_json> <out_source_json>)``
@@ -38,9 +51,16 @@ function(cdpm_prepare_source pkg_name pkg_version meta_json out_source_json)
     string(JSON src_type GET "${src}" "type")
 
     if(src_type STREQUAL "local")
-        string(JSON path GET "${src}" "path")
+        string(JSON path ERROR_VARIABLE path_err GET "${src}" "path")
+        if(path_err)
+            string(JSON path ERROR_VARIABLE path_err GET "${src}" "url")
+        endif()
+        if(path_err OR path STREQUAL "")
+            message(FATAL_ERROR "[cdpm] package '${name}': local source requires a non-empty path.")
+        endif()
         if(NOT IS_ABSOLUTE "${path}")
-            cmake_path(ABSOLUTE_PATH path BASE_DIRECTORY "${CMAKE_SOURCE_DIR}" NORMALIZE OUTPUT_VARIABLE path)
+            _cdpm_resolve_project_dir(project_dir)
+            cmake_path(ABSOLUTE_PATH path BASE_DIRECTORY "${project_dir}" NORMALIZE OUTPUT_VARIABLE path)
         endif()
         if(NOT EXISTS "${path}")
             message(FATAL_ERROR "[cdpm] package '${name}': local source path does not exist: ${path}")
@@ -55,8 +75,9 @@ function(cdpm_prepare_source pkg_name pkg_version meta_json out_source_json)
     if(src_type STREQUAL "git")
         string(JSON url GET "${src}" "url")
         string(JSON rev ERROR_VARIABLE rev_err GET "${src}" "rev")
-        if(rev_err OR rev STREQUAL "")
-            message(FATAL_ERROR "[cdpm] package '${name}': git source requires a pinned 'rev'.")
+        string(LENGTH "${rev}" rev_length)
+        if(rev_err OR NOT rev_length EQUAL 40 OR NOT rev MATCHES [[^[0-9A-Fa-f]+$]])
+            message(FATAL_ERROR "[cdpm] package '${name}': git source requires a full 40-hex 'rev'.")
         endif()
         set(result "{}")
         _cdpm_json_set_safe("${result}" "type" "git" "STRING" result)
@@ -69,8 +90,10 @@ function(cdpm_prepare_source pkg_name pkg_version meta_json out_source_json)
     if(src_type STREQUAL "url")
         string(JSON url GET "${src}" "url")
         string(JSON sha ERROR_VARIABLE sha_err GET "${src}" "sha256")
-        if(sha_err OR sha STREQUAL "")
-            message(FATAL_ERROR "[cdpm] package '${name}': url source requires 'sha256'.")
+        string(LENGTH "${sha}" sha_length)
+        if(sha_err OR NOT sha_length EQUAL 64 OR NOT sha MATCHES [[^[0-9A-Fa-f]+$]])
+            message(FATAL_ERROR "[cdpm] package '${name}': url source requires 'sha256' as exactly 64 hex "
+                "characters.")
         endif()
         set(result "{}")
         _cdpm_json_set_safe("${result}" "type" "url" "STRING" result)
@@ -90,7 +113,7 @@ endfunction()
 # order, in ``<out_patches_json>`` (``[]`` when none). The applicable set and its order come from
 # :cmake:command:`cdpm_resolve_patch_list` (package-level ``patches[]`` filtered by ``applies_to``/
 # ``exclude``, then per-version ``versions.<version>.patches``). Relative paths are resolved against
-# ``CMAKE_SOURCE_DIR``; a missing file is fatal. The patches are applied by the build driver via
+# the project directory; a missing file is fatal. The patches are applied by the build driver via
 # ExternalProject's ``PATCH_COMMAND`` (``git apply``), and their contents already feed the config hash
 # (see :cmake:command:`cdpm_compute_config_hash`).
 function(cdpm_collect_patches pkg_name pkg_version meta_json out_patches_json)
@@ -105,10 +128,11 @@ function(cdpm_collect_patches pkg_name pkg_version meta_json out_patches_json)
     endif()
 
     math(EXPR last "${count} - 1")
+    _cdpm_resolve_project_dir(project_dir)
     foreach(i RANGE 0 ${last})
         string(JSON patch_path GET "${specs}" ${i})
         if(NOT IS_ABSOLUTE "${patch_path}")
-            cmake_path(ABSOLUTE_PATH patch_path BASE_DIRECTORY "${CMAKE_SOURCE_DIR}" NORMALIZE
+            cmake_path(ABSOLUTE_PATH patch_path BASE_DIRECTORY "${project_dir}" NORMALIZE
                 OUTPUT_VARIABLE patch_path)
         endif()
         if(NOT EXISTS "${patch_path}")
@@ -137,11 +161,18 @@ function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
     string(TOLOWER "${pkg_name}" name)
 
     _cdpm_resolve_store_dir(store)
+    _cdpm_resolve_runtime_dir(runtime_dir)
     set(install_dir "${store}/${name}/${config_hash}")
 
     if(EXISTS "${install_dir}/.cdpm_installed")
+        file(REMOVE "${runtime_dir}/user/${name}-${config_hash}.cmake")
         message(STATUS "[cdpm] ${name}@${pkg_version} [${config_hash}] already installed -- skipping.")
         return()
+    endif()
+
+    file(MAKE_DIRECTORY "${runtime_dir}")
+    if(UNIX)
+        file(CHMOD "${runtime_dir}" PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE)
     endif()
 
     # ---- Source + patches (downloaded/applied by the driver via ExternalProject) -
@@ -157,16 +188,8 @@ function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
         cdpm_get_package_options("${name}" "${pkg_version}" options)
     endif()
 
-    # ---- User key-value file ----------------------------------------------------
-    set(user_file "")
-    if(COMMAND cdpm_generate_user_file)
-        set(user_file "${CMAKE_BINARY_DIR}/.cdpm/user/${name}-${config_hash}.cmake")
-        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/.cdpm/user")
-        cdpm_generate_user_file("${name}" "${user_file}")
-    endif()
-
     # ---- Build directory --------------------------------------------------------
-    set(build_dir "${CMAKE_BINARY_DIR}/.cdpm/bs/${name}-${config_hash}")
+    set(build_dir "${runtime_dir}/bs/${name}-${config_hash}")
 
     # ---- Select the build-system driver -----------------------------------------
     set(bs "cmake")
@@ -192,6 +215,20 @@ function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
             "cdpm_bs_${bs}_build().")
     endif()
 
+    # ---- User key-value file ----------------------------------------------------
+    set(user_file "")
+    if(COMMAND cdpm_generate_user_file)
+        set(user_file "${runtime_dir}/user/${name}-${config_hash}.cmake")
+        file(MAKE_DIRECTORY "${runtime_dir}/user")
+        if(UNIX)
+            file(CHMOD "${runtime_dir}/user" PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE)
+        endif()
+        cdpm_generate_user_file("${name}" "${user_file}")
+        if(UNIX)
+            file(CHMOD "${user_file}" PERMISSIONS OWNER_READ OWNER_WRITE)
+        endif()
+    endif()
+
     # ---- Assemble the driver context -------------------------------------------
     set(ctx "{}")
     _cdpm_json_set_safe("${ctx}" "build_dir"    "${build_dir}"          "STRING" ctx)
@@ -203,10 +240,14 @@ function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
     _cdpm_json_set_safe("${ctx}" "build_type"   "${CMAKE_BUILD_TYPE}"   "STRING" ctx)
     _cdpm_json_set_safe("${ctx}" "generator"    "${CMAKE_GENERATOR}"    "STRING" ctx)
     _cdpm_json_set_safe("${ctx}" "prefix_path"  "${CMAKE_PREFIX_PATH}"  "STRING" ctx)
+    _cdpm_json_set_safe("${ctx}" "module_path"  "${CMAKE_MODULE_PATH}"  "STRING" ctx)
     _cdpm_json_set_safe("${ctx}" "user_file"    "${user_file}"          "STRING" ctx)
 
     message(STATUS "[cdpm] building ${name}@${pkg_version} [${config_hash}] via '${bs}' driver")
     cmake_language(CALL "cdpm_bs_${bs}_build" "${ctx}")
+
+    # The generated file may contain secrets and is needed only during the driver build.
+    _cdpm_cleanup_driver_user_file("${ctx}")
 
     # ---- Optional CPS generation hook (module lands later) ----------------------
     if(COMMAND cdpm_generate_cps_file)

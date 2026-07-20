@@ -23,6 +23,7 @@ include_guard(GLOBAL)
 #
 # ``gn`` and ``ninja`` are located via ``find_program``; all steps run through ``execute_process``.
 function(cdpm_bs_gn_build ctx_json)
+    _cdpm_cleanup_driver_user_file("${ctx_json}")
     message(FATAL_ERROR
         "[cdpm] build-system driver 'gn' is not yet implemented. "
         "Only the 'cmake' driver is available in this version."

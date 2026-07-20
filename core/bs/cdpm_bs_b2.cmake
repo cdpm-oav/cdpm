@@ -12,6 +12,7 @@ include_guard(GLOBAL)
 # ``variant=`` from ``CMAKE_BUILD_TYPE``, ``link=static|shared``, and ``--with-<lib>`` from a
 # ``libraries`` option list (the BoostBuild.cmake pattern used by vcpkg). All via ``execute_process``.
 function(cdpm_bs_b2_build ctx_json)
+    _cdpm_cleanup_driver_user_file("${ctx_json}")
     message(FATAL_ERROR
         "[cdpm] build-system driver 'b2' is not yet implemented. "
         "Only the 'cmake' driver is available in this version."

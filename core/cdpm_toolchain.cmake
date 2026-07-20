@@ -4,6 +4,8 @@ include_guard(GLOBAL)
 
 cmake_policy(SET CMP0140 NEW)
 
+include(cdpm_context)
+
 # .. rst:
 # ``__CDPM_TOOLCHAIN_VARS_BUILTIN``
 #
@@ -19,6 +21,8 @@ set(__CDPM_TOOLCHAIN_VARS_BUILTIN
     CMAKE_SYSTEM_NAME CMAKE_SYSTEM_VERSION CMAKE_SYSTEM_PROCESSOR
     # Cross-compile roots
     CMAKE_SYSROOT CMAKE_FIND_ROOT_PATH
+    CMAKE_FIND_ROOT_PATH_MODE_PACKAGE CMAKE_FIND_ROOT_PATH_MODE_PROGRAM
+    CMAKE_FIND_ROOT_PATH_MODE_LIBRARY CMAKE_FIND_ROOT_PATH_MODE_INCLUDE
     # Build tooling / type
     CMAKE_MAKE_PROGRAM CMAKE_BUILD_TYPE
     # Android (NDK / Android Studio inject these as -D, not via a toolchain file)
@@ -54,7 +58,7 @@ endfunction()
 #
 # Generates (idempotently) the wrapper toolchain used to configure an isolated child build and returns its
 # path in ``<out_toolchain_path>``. The wrapper lives at
-# ``${CMAKE_BINARY_DIR}/.cdpm/toolchain/<config_hash>.cmake`` (``-host.cmake`` in ``HOST`` mode).
+# ``<runtime>/toolchain/<config_hash>.cmake`` (``-host.cmake`` in ``HOST`` mode).
 #
 # The wrapper:
 #
@@ -84,7 +88,8 @@ function(cdpm_prepare_toolchain config_hash out_toolchain_path)
         )
     endif()
 
-    set(tc_dir "${CMAKE_BINARY_DIR}/.cdpm/toolchain")
+    _cdpm_resolve_runtime_dir(runtime_dir)
+    set(tc_dir "${runtime_dir}/toolchain")
     if(arg_HOST)
         set(tc_file "${tc_dir}/${config_hash}-host.cmake")
     else()

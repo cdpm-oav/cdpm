@@ -13,6 +13,7 @@ set(CMAKE_BINARY_DIR "${tmp}")
 
 # Built-in allow-list var (as Android Studio would inject via -D).
 set(ANDROID_ABI "arm64-v8a")
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 # User-extended allow-list var.
 set(CDPM_TOOLCHAIN_VARS "MY_CUSTOM_VAR")
 set(MY_CUSTOM_VAR "custom-value")
@@ -23,6 +24,7 @@ cdpm_prepare_toolchain("deadbeef" out)
 
 file(READ "${out}" content)
 assert_match("${content}" "set\\(ANDROID_ABI \"arm64-v8a\"" "built-in allow-list var is frozen")
+assert_match("${content}" "set\\(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE \"ONLY\"" "root-path mode is frozen")
 assert_match("${content}" "set\\(MY_CUSTOM_VAR \"custom-value\"" "user allow-list var is frozen")
 if(content MATCHES "SOME_UNRELATED_VAR")
     message(FATAL_ERROR "FAIL: a non-allow-listed variable leaked into the wrapper")

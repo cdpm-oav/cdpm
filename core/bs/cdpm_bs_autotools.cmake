@@ -12,6 +12,7 @@ include_guard(GLOBAL)
 # ``make`` and ``make install`` via ``execute_process``. Options are passed through as native
 # ``configure`` arguments (``configure_args`` list). All work through ``execute_process`` - no shell.
 function(cdpm_bs_autotools_build ctx_json)
+    _cdpm_cleanup_driver_user_file("${ctx_json}")
     message(FATAL_ERROR
         "[cdpm] build-system driver 'autotools' is not yet implemented. "
         "Only the 'cmake' driver is available in this version."
