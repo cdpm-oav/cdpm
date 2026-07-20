@@ -252,6 +252,8 @@ add_unit_tests(MODULE cdpm_registry
         load.schema2_masks_overlay
         load.schema2_repeated_masks
         load.schema_equivalence
+        convert.wrapper_deterministic
+        convert.production_equivalence
         load.root_index_fifo
         validate.api
         validate.cli
@@ -270,6 +272,11 @@ add_unit_tests(MODULE cdpm_registry
         load.patch_symlink_escape
         load.manifest_fifo
         load.patch_fifo
+        convert.destination_uncontrolled
+        convert.patch_missing
+        convert.patch_absolute
+        convert.patch_traversal
+        convert.malformed_input
 )
 set_tests_properties(
     unit.cdpm_registry.load.manifest_symlink_escape
