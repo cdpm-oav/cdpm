@@ -19,6 +19,8 @@ include(cdpm_version)
 include(cdpm_config)
 # Lockfile read/write (cdpm_read_lockfile / cdpm_write_lockfile / cdpm_lockfile_get).
 include(cdpm_lockfile)
+include(cdpm_context)
+include(cdpm_resolve)
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -86,7 +88,7 @@ endfunction()
 # :param pkg_version:   resolved version
 # :param config_hash:   resolved config hash
 # :param meta_json:     registry metadata for the package
-# :param lockfile_path: lockfile path (empty = default ${CMAKE_SOURCE_DIR}/cdpm.lock.json)
+# :param lockfile_path: lockfile path (empty = default <project>/cdpm.lock.json)
 function(_cdpm_record_package_lock pkg_name pkg_version config_hash meta_json lockfile_path)
     if(NOT COMMAND cdpm_write_lockfile OR NOT COMMAND cdpm_get_package_source)
         return()
@@ -114,7 +116,7 @@ function(cdpm_cmd_help)
     message([[
 
 Usage:
-  cmake -P cdpm-cli.cmake -- [--toolchain <path>] [--generator <name>] <command> [arguments]
+  cmake -P cdpm-cli.cmake -- [global options] <command> [arguments]
 
 Global options (must appear before the command):
   --toolchain <path>               Path to a CMake toolchain file.
@@ -122,6 +124,10 @@ Global options (must appear before the command):
                                    Affects config-hash computation and child builds.
   --generator <name>               Specify a build system generator.
                                    Overrides CMAKE_GENERATOR when both are set.
+                                   Affects config-hash computation and child builds.
+  --project-dir <path>             Project directory (default: invocation working directory).
+                                   Relative paths are resolved from the invocation working directory.
+  --build-type <type>              Child build type (default: CMAKE_BUILD_TYPE, then Release).
                                    Affects config-hash computation and child builds.
 
 Commands:
@@ -142,6 +148,8 @@ Environment / cache variables:
   CDPM_TOOLSET                     Optional toolset tag included in config hash
   CMAKE_TOOLCHAIN_FILE             Toolchain file fallback (see --toolchain above)
   CMAKE_GENERATOR                  Generator name fallback (see --generator above)
+  CDPM_PROJECT_DIR                 Project directory override used by core modules
+  CDPM_RUNTIME_DIR                 Scratch directory override for builds and generated files
 ]])
 endfunction()
 
@@ -246,9 +254,7 @@ function(cdpm_cmd_install pkg_name pkg_version toolchain_file generator)
         message(FATAL_ERROR "[cdpm] 'install' requires a package name.")
     endif()
 
-    foreach(__cmd IN ITEMS cdpm_config_load cdpm_load_repos cdpm_find_in_repo
-                           cdpm_resolve_version cdpm_compute_config_hash
-                           cdpm_build_dependency)
+    foreach(__cmd IN ITEMS cdpm_resolve_and_build)
         if(NOT COMMAND ${__cmd})
             message(FATAL_ERROR "[cdpm] Required function '${__cmd}' is not available. "
                                 "Check that all core modules are included.")
@@ -268,39 +274,20 @@ function(cdpm_cmd_install pkg_name pkg_version toolchain_file generator)
     endif()
 
     cdpm_config_load()
-    cdpm_load_repos()
-    cdpm_find_in_repo("${pkg_name}" __found __meta_json)
-    if(NOT __found)
-        message(FATAL_ERROR
-            "[cdpm] Package '${pkg_name}' not found in any loaded repository.\n"
-            "Declare a registry in cdpm.json (\"repos\": [ { \"kind\": \"file\", \"path\": "
-            "\"<.../packages.json>\" } ]) or run 'add-registry <path>'."
-        )
+    if(NOT DEFINED CDPM_RUNTIME_DIR OR CDPM_RUNTIME_DIR STREQUAL "")
+        _cdpm_resolve_store_dir(__runtime_store)
+        _cdpm_resolve_cli_runtime_dir(CDPM_RUNTIME_DIR "${__runtime_store}")
     endif()
-
-    cdpm_resolve_version("${pkg_name}" "${__meta_json}" "${pkg_version}" __resolved_ver __compat_ver)
-
     if(NOT toolchain_file STREQUAL "")
         message(STATUS "[cdpm] Toolchain: ${toolchain_file}")
     endif()
     if(NOT generator STREQUAL "")
         message(STATUS "[cdpm] Generator: ${generator}")
     endif()
-    message(STATUS "[cdpm] Installing ${pkg_name}@${__resolved_ver} ...")
-
-    cdpm_compute_config_hash("${pkg_name}" "${__resolved_ver}" "${__meta_json}" __hash)
-    _cdpm_resolve_store_dir(__store)
-    set(__install_dir "${__store}/${pkg_name}/${__hash}")
-
-    if(EXISTS "${__install_dir}/.cdpm_installed")
-        message(STATUS "[cdpm] ${pkg_name}@${__resolved_ver} [${__hash}] already installed -- skipping.")
-        # Still record the (already-installed) package in the lockfile so the resolved graph is pinned.
-        _cdpm_record_package_lock("${pkg_name}" "${__resolved_ver}" "${__hash}" "${__meta_json}" "")
-        return()
-    endif()
-
-    cdpm_build_dependency("${pkg_name}" "${__resolved_ver}" "${__hash}" "${__meta_json}")
-    _cdpm_record_package_lock("${pkg_name}" "${__resolved_ver}" "${__hash}" "${__meta_json}" "")
+    message(STATUS "[cdpm] Installing ${pkg_name} ...")
+    cdpm_resolve_and_build("${pkg_name}" "${pkg_version}" __context)
+    string(JSON __resolved_ver GET "${__context}" version)
+    string(JSON __install_dir GET "${__context}" install_dir)
     message(STATUS "[cdpm] Done: ${pkg_name}@${__resolved_ver} -> ${__install_dir}")
 endfunction()
 
@@ -338,23 +325,25 @@ function(cdpm_cmd_clean pkg_name pkg_hash)
 endfunction()
 
 # :brief: Reads a lockfile and installs every package listed in it.
-# :param lockfile_path:  path to cdpm.lock.json (empty = ${CMAKE_SOURCE_DIR}/cdpm.lock.json)
+# :param lockfile_path:  path to cdpm.lock.json (empty = <project>/cdpm.lock.json)
 # :param toolchain_file: absolute path to a CMake toolchain file, or empty string
 # :param generator:      build system generator name, or empty string
 function(cdpm_cmd_provision lockfile_path toolchain_file generator)
     _cdpm_print_banner()
 
+    _cdpm_resolve_project_dir(project_dir)
     if(lockfile_path STREQUAL "")
-        set(lockfile_path "${CMAKE_SOURCE_DIR}/cdpm.lock.json")
+        set(lockfile_path "${project_dir}/cdpm.lock.json")
+    elseif(NOT IS_ABSOLUTE "${lockfile_path}")
+        cmake_path(ABSOLUTE_PATH lockfile_path BASE_DIRECTORY "${project_dir}" NORMALIZE
+            OUTPUT_VARIABLE lockfile_path)
     endif()
 
     if(NOT EXISTS "${lockfile_path}")
         message(FATAL_ERROR "[cdpm] Lockfile not found: ${lockfile_path}")
     endif()
 
-    foreach(__cmd IN ITEMS cdpm_config_load cdpm_load_repos cdpm_find_in_repo
-                           cdpm_resolve_version cdpm_compute_config_hash
-                           cdpm_build_dependency cdpm_read_lockfile cdpm_lockfile_get)
+    foreach(__cmd IN ITEMS cdpm_resolve_and_build cdpm_read_lockfile)
         if(NOT COMMAND ${__cmd})
             message(FATAL_ERROR "[cdpm] Required function '${__cmd}' is not available.")
         endif()
@@ -372,7 +361,10 @@ function(cdpm_cmd_provision lockfile_path toolchain_file generator)
     # fast-path consult it) and enumerate its packages.
     cdpm_read_lockfile(PATH "${lockfile_path}")
     cdpm_config_load()
-    cdpm_load_repos()
+    if(NOT DEFINED CDPM_RUNTIME_DIR OR CDPM_RUNTIME_DIR STREQUAL "")
+        _cdpm_resolve_store_dir(__runtime_store NO_CREATE)
+        _cdpm_resolve_cli_runtime_dir(CDPM_RUNTIME_DIR "${__runtime_store}")
+    endif()
 
     get_property(__lock_json GLOBAL PROPERTY CDPM_LOCKFILE_JSON)
     string(JSON __pkg_count ERROR_VARIABLE __err LENGTH "${__lock_json}" "packages")
@@ -381,47 +373,28 @@ function(cdpm_cmd_provision lockfile_path toolchain_file generator)
         return()
     endif()
 
-    _cdpm_resolve_store_dir(__store)
-
-    math(EXPR __last "${__pkg_count} - 1")
-    foreach(__i RANGE 0 ${__last})
-        string(JSON __pkg_name ERROR_VARIABLE __err MEMBER "${__lock_json}" "packages" ${__i})
-        if(__err)
-            message(WARNING "[cdpm] provision: cannot read package index ${__i} -- ${__err}")
-            continue()
-        endif()
-
-        cdpm_find_in_repo("${__pkg_name}" __found __meta_json)
-        if(NOT __found)
-            message(WARNING "[cdpm] provision: '${__pkg_name}' is not in any loaded repository -- skipping.")
-            continue()
-        endif()
-
-        cdpm_resolve_version("${__pkg_name}" "${__meta_json}" "" __resolved_ver __compat_ver)
-        cdpm_compute_config_hash("${__pkg_name}" "${__resolved_ver}" "${__meta_json}" __hash)
-        set(__install_dir "${__store}/${__pkg_name}/${__hash}")
-
-        # Fast-path: lockfile pins this hash AND the sentinel exists -> nothing to do.
-        cdpm_lockfile_get("${__pkg_name}" __lk_found __lk_entry)
-        set(__locked FALSE)
-        if(__lk_found)
-            string(JSON __lk_hash ERROR_VARIABLE __lk_err GET "${__lk_entry}" "config_hash")
-            if(NOT __lk_err AND __lk_hash STREQUAL "${__hash}"
-               AND EXISTS "${__install_dir}/.cdpm_installed")
-                set(__locked TRUE)
-            endif()
-        endif()
-
-        if(__locked)
-            message(STATUS "[cdpm] ${__pkg_name}@${__resolved_ver} [${__hash}] locked + installed -- skipping.")
-            continue()
-        endif()
-
-        message(STATUS "[cdpm] Provisioning ${__pkg_name}@${__resolved_ver} [${__hash}] ...")
-        cdpm_build_dependency("${__pkg_name}" "${__resolved_ver}" "${__hash}" "${__meta_json}")
-        _cdpm_record_package_lock("${__pkg_name}" "${__resolved_ver}" "${__hash}" "${__meta_json}"
-            "${lockfile_path}")
+    _cdpm_lockfile_get_roots("${__lock_json}" __root_names)
+    set(__provision_roots "")
+    foreach(__pkg_name IN LISTS __root_names)
+        string(JSON __pinned_version GET
+            "${__lock_json}" packages "${__pkg_name}" version)
+        list(APPEND __provision_roots "${__pkg_name}" "${__pinned_version}")
+        message(STATUS "[cdpm] Verifying ${__pkg_name}@${__pinned_version} ...")
+        cdpm_resolve_and_build("${__pkg_name}" "${__pinned_version}" __context
+            LOCK_MODE VERIFY VALIDATE_ONLY)
     endforeach()
+
+    list(LENGTH __provision_roots __root_parts)
+    if(__root_parts GREATER 0)
+        math(EXPR __root_last "${__root_parts} - 1")
+        foreach(__i RANGE 0 ${__root_last} 2)
+            math(EXPR __version_index "${__i} + 1")
+            list(GET __provision_roots ${__i} __pkg_name)
+            list(GET __provision_roots ${__version_index} __pinned_version)
+            message(STATUS "[cdpm] Provisioning ${__pkg_name}@${__pinned_version} ...")
+            cdpm_resolve_and_build("${__pkg_name}" "${__pinned_version}" __context LOCK_MODE VERIFY)
+        endforeach()
+    endif()
 
     message(STATUS "[cdpm] Provision complete.")
 endfunction()
@@ -431,7 +404,7 @@ endfunction()
 #         registry survives across CLI invocations (cmake -P script mode keeps no cache) and is actually
 #         consumed by cdpm_load_repos(). The registry path is stored absolute, which is CWD-independent.
 # :param registry_path: path to a packages.json file (resolved to an absolute path)
-# :param scope:         'machine' (~/.cdpm/config.json) or 'project' (${CMAKE_SOURCE_DIR}/cdpm.json).
+# :param scope:         'machine' (~/.cdpm/config.json) or 'project' (<project>/cdpm.json).
 #                       The target file mirrors cdpm_config_load()'s layer-path resolution, so the
 #                       CDPM_MACHINE_CONFIG / CDPM_PROJECT_CONFIG overrides apply identically.
 function(cdpm_cmd_add_registry registry_path scope)
@@ -441,11 +414,16 @@ function(cdpm_cmd_add_registry registry_path scope)
         message(FATAL_ERROR "[cdpm] 'add-registry' requires a path to a packages.json file.")
     endif()
 
+    _cdpm_resolve_project_dir(project_dir)
+    if(NOT IS_ABSOLUTE "${registry_path}")
+        cmake_path(ABSOLUTE_PATH registry_path BASE_DIRECTORY "${project_dir}" NORMALIZE
+            OUTPUT_VARIABLE registry_path)
+    endif()
+
     if(NOT EXISTS "${registry_path}")
         message(WARNING "[cdpm] Registry file does not exist (yet): ${registry_path}")
     endif()
-
-    cmake_path(ABSOLUTE_PATH registry_path NORMALIZE OUTPUT_VARIABLE abs_path)
+    set(abs_path "${registry_path}")
 
     # Resolve the target config file, mirroring cdpm_config_load()'s layer-path resolution so we write
     # exactly the file the loader reads (and so the *_CONFIG cache overrides make this testable).
@@ -459,7 +437,7 @@ function(cdpm_cmd_add_registry registry_path scope)
         if(DEFINED CDPM_PROJECT_CONFIG)
             set(target "${CDPM_PROJECT_CONFIG}")
         else()
-            set(target "${CMAKE_SOURCE_DIR}/cdpm.json")
+            set(target "${project_dir}/cdpm.json")
         endif()
     else()
         message(FATAL_ERROR "[cdpm] add-registry: unknown scope '${scope}' (expected machine|project).")

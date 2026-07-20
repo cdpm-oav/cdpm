@@ -2,7 +2,7 @@
 # Entry point for the cdpm command-line interface.
 #
 # Usage:
-#   cmake -P cdpm-cli.cmake -- [--toolchain <path>] [--generator <name>] <command> [arguments]
+#   cmake -P cdpm-cli.cmake -- [global options] <command> [arguments]
 #
 # cmake -P passes arguments through CMAKE_ARGV<N>:
 #   CMAKE_ARGV0 = cmake executable path
@@ -26,6 +26,8 @@ list(PREPEND CMAKE_MODULE_PATH "${__CDPM_ROOT}/core")
 # Include core modules.
 # ---------------------------------------------------------------------------
 include(cdpm_cli_commands)
+
+include(cdpm_resolve)
 
 # cdpm_config.cmake is optional at this stage: it may not exist yet while the
 # module is being scaffolded.  Commands that need it check internally.
@@ -112,8 +114,13 @@ set(CDPM_EFFECTIVE_TOOLCHAIN "")
 # ---------------------------------------------------------------------------
 set(CDPM_EFFECTIVE_GENERATOR "")
 
-# Strip global options (--toolchain <path>, --generator <name>) from CDPM_CLI_ARGS;
-# they are global options, not positional command arguments.
+# Project and build context defaults are finalized after global option parsing.
+set(CDPM_EFFECTIVE_PROJECT_DIR "")
+set(CDPM_EFFECTIVE_BUILD_TYPE "")
+file(REAL_PATH "." __CDPM_INVOCATION_CWD)
+
+# Parse global options only in the prefix before the command. Once the first positional token is reached,
+# all remaining tokens belong to that command.
 set(__CDPM_CLEAN_ARGS "")
 list(LENGTH CDPM_CLI_ARGS __CDPM_NARGS)
 set(__CDPM_GOPT_IDX 0)
@@ -123,6 +130,9 @@ while(__CDPM_GOPT_IDX LESS "${__CDPM_NARGS}")
         math(EXPR __CDPM_GOPT_NEXT "${__CDPM_GOPT_IDX} + 1")
         if(__CDPM_GOPT_NEXT LESS "${__CDPM_NARGS}")
             list(GET CDPM_CLI_ARGS ${__CDPM_GOPT_NEXT} CDPM_EFFECTIVE_TOOLCHAIN)
+            if(CDPM_EFFECTIVE_TOOLCHAIN STREQUAL "")
+                message(FATAL_ERROR "[cdpm] '--toolchain' requires a non-empty path argument.")
+            endif()
             # Advance past the value token.
             math(EXPR __CDPM_GOPT_IDX "${__CDPM_GOPT_IDX} + 2")
         else()
@@ -132,20 +142,64 @@ while(__CDPM_GOPT_IDX LESS "${__CDPM_NARGS}")
         math(EXPR __CDPM_GOPT_NEXT "${__CDPM_GOPT_IDX} + 1")
         if(__CDPM_GOPT_NEXT LESS "${__CDPM_NARGS}")
             list(GET CDPM_CLI_ARGS ${__CDPM_GOPT_NEXT} CDPM_EFFECTIVE_GENERATOR)
+            if(CDPM_EFFECTIVE_GENERATOR STREQUAL "")
+                message(FATAL_ERROR "[cdpm] '--generator' requires a non-empty name argument.")
+            endif()
             # Advance past the value token.
             math(EXPR __CDPM_GOPT_IDX "${__CDPM_GOPT_IDX} + 2")
         else()
             message(FATAL_ERROR "[cdpm] '--generator' requires a name argument.")
         endif()
+    elseif(__CDPM_GOPT_TOKEN STREQUAL "--project-dir")
+        math(EXPR __CDPM_GOPT_NEXT "${__CDPM_GOPT_IDX} + 1")
+        if(__CDPM_GOPT_NEXT LESS "${__CDPM_NARGS}")
+            list(GET CDPM_CLI_ARGS ${__CDPM_GOPT_NEXT} CDPM_EFFECTIVE_PROJECT_DIR)
+            if(CDPM_EFFECTIVE_PROJECT_DIR STREQUAL "")
+                message(FATAL_ERROR "[cdpm] '--project-dir' requires a non-empty path argument.")
+            endif()
+            math(EXPR __CDPM_GOPT_IDX "${__CDPM_GOPT_IDX} + 2")
+        else()
+            message(FATAL_ERROR "[cdpm] '--project-dir' requires a path argument.")
+        endif()
+    elseif(__CDPM_GOPT_TOKEN STREQUAL "--build-type")
+        math(EXPR __CDPM_GOPT_NEXT "${__CDPM_GOPT_IDX} + 1")
+        if(__CDPM_GOPT_NEXT LESS "${__CDPM_NARGS}")
+            list(GET CDPM_CLI_ARGS ${__CDPM_GOPT_NEXT} CDPM_EFFECTIVE_BUILD_TYPE)
+            if(CDPM_EFFECTIVE_BUILD_TYPE STREQUAL "")
+                message(FATAL_ERROR "[cdpm] '--build-type' requires a non-empty type argument.")
+            endif()
+            math(EXPR __CDPM_GOPT_IDX "${__CDPM_GOPT_IDX} + 2")
+        else()
+            message(FATAL_ERROR "[cdpm] '--build-type' requires a type argument.")
+        endif()
     else()
-        list(APPEND __CDPM_CLEAN_ARGS "${__CDPM_GOPT_TOKEN}")
-        math(EXPR __CDPM_GOPT_IDX "${__CDPM_GOPT_IDX} + 1")
+        list(SUBLIST CDPM_CLI_ARGS ${__CDPM_GOPT_IDX} -1 __CDPM_CLEAN_ARGS)
+        break()
     endif()
 endwhile()
 set(CDPM_CLI_ARGS "${__CDPM_CLEAN_ARGS}")
 unset(__CDPM_CLEAN_ARGS)
 unset(__CDPM_GOPT_IDX)
 unset(__CDPM_GOPT_TOKEN)
+
+# Resolve project paths against the invocation working directory, not the CLI script location.
+if(CDPM_EFFECTIVE_PROJECT_DIR STREQUAL "")
+    set(CDPM_EFFECTIVE_PROJECT_DIR "${__CDPM_INVOCATION_CWD}")
+else()
+    cmake_path(ABSOLUTE_PATH CDPM_EFFECTIVE_PROJECT_DIR BASE_DIRECTORY "${__CDPM_INVOCATION_CWD}" NORMALIZE
+        OUTPUT_VARIABLE CDPM_EFFECTIVE_PROJECT_DIR)
+endif()
+set(CDPM_PROJECT_DIR "${CDPM_EFFECTIVE_PROJECT_DIR}")
+
+# Priority: --build-type > an existing CMAKE_BUILD_TYPE > Release.
+if(CDPM_EFFECTIVE_BUILD_TYPE STREQUAL "")
+    if(DEFINED CMAKE_BUILD_TYPE AND NOT CMAKE_BUILD_TYPE STREQUAL "")
+        set(CDPM_EFFECTIVE_BUILD_TYPE "${CMAKE_BUILD_TYPE}")
+    else()
+        set(CDPM_EFFECTIVE_BUILD_TYPE "Release")
+    endif()
+endif()
+set(CMAKE_BUILD_TYPE "${CDPM_EFFECTIVE_BUILD_TYPE}")
 
 # Fall back to CMAKE_TOOLCHAIN_FILE if --toolchain was not supplied.
 if(CDPM_EFFECTIVE_TOOLCHAIN STREQUAL "" AND DEFINED CMAKE_TOOLCHAIN_FILE
@@ -204,7 +258,7 @@ elseif(__CDPM_COMMAND STREQUAL "list")
 elseif(__CDPM_COMMAND STREQUAL "info")
     if(__CDPM_NARGS LESS 2)
         message(FATAL_ERROR "[cdpm] 'info' requires a package name.\n"
-                            "Usage: cmake -P cdpm-cli.cmake -- info <package>")
+                            "Usage: cmake -P cdpm-cli.cmake -- [global options] info <package>")
     endif()
     list(GET CDPM_CLI_ARGS 1 __CDPM_PKG)
     cdpm_cmd_info("${__CDPM_PKG}")
@@ -213,7 +267,7 @@ elseif(__CDPM_COMMAND STREQUAL "info")
 elseif(__CDPM_COMMAND STREQUAL "install")
     if(__CDPM_NARGS LESS 2)
         message(FATAL_ERROR "[cdpm] 'install' requires a package name.\n"
-                            "Usage: cmake -P cdpm-cli.cmake -- [--toolchain <path>] install <package> [<version>]")
+                            "Usage: cmake -P cdpm-cli.cmake -- [global options] install <package> [<version>]")
     endif()
     list(GET CDPM_CLI_ARGS 1 __CDPM_PKG)
 
@@ -228,7 +282,7 @@ elseif(__CDPM_COMMAND STREQUAL "install")
 elseif(__CDPM_COMMAND STREQUAL "clean")
     if(__CDPM_NARGS LESS 2)
         message(FATAL_ERROR "[cdpm] 'clean' requires a package name.\n"
-                            "Usage: cmake -P cdpm-cli.cmake -- clean <package> [<hash>]")
+                            "Usage: cmake -P cdpm-cli.cmake -- [global options] clean <package> [<hash>]")
     endif()
     list(GET CDPM_CLI_ARGS 1 __CDPM_PKG)
 
@@ -251,6 +305,9 @@ elseif(__CDPM_COMMAND STREQUAL "provision")
             math(EXPR __CDPM_PROV_NEXT "${__CDPM_PROV_IDX} + 1")
             if(__CDPM_PROV_NEXT LESS "${__CDPM_NARGS}")
                 list(GET CDPM_CLI_ARGS ${__CDPM_PROV_NEXT} __CDPM_LOCKFILE)
+                if(__CDPM_LOCKFILE STREQUAL "")
+                    message(FATAL_ERROR "[cdpm] '--lockfile' requires a non-empty path argument.")
+                endif()
             else()
                 message(FATAL_ERROR "[cdpm] '--lockfile' requires a path argument.")
             endif()
@@ -285,7 +342,7 @@ elseif(__CDPM_COMMAND STREQUAL "add-registry")
 
     if(__CDPM_REG_PATH STREQUAL "")
         message(FATAL_ERROR "[cdpm] 'add-registry' requires a registry path.\n"
-                            "Usage: cmake -P cdpm-cli.cmake -- add-registry <path/to/packages.json> "
+                            "Usage: cmake -P cdpm-cli.cmake -- [global options] add-registry <path/to/packages.json> "
                             "[--scope machine|project]")
     endif()
     cdpm_cmd_add_registry("${__CDPM_REG_PATH}" "${__CDPM_REG_SCOPE}")
@@ -294,7 +351,7 @@ elseif(__CDPM_COMMAND STREQUAL "add-registry")
 elseif(__CDPM_COMMAND STREQUAL "config")
     if(__CDPM_NARGS LESS 2)
         message(FATAL_ERROR "[cdpm] 'config' requires a subcommand.\n"
-                            "Usage: cmake -P cdpm-cli.cmake -- config blame [<path>]")
+                            "Usage: cmake -P cdpm-cli.cmake -- [global options] config blame [<path>]")
     endif()
     list(GET CDPM_CLI_ARGS 1 __CDPM_CONFIG_SUB)
 
@@ -307,7 +364,7 @@ elseif(__CDPM_COMMAND STREQUAL "config")
     else()
         message(FATAL_ERROR
             "[cdpm] Unknown 'config' subcommand: '${__CDPM_CONFIG_SUB}'\n"
-            "Usage: cmake -P cdpm-cli.cmake -- config blame [<path>]")
+            "Usage: cmake -P cdpm-cli.cmake -- [global options] config blame [<path>]")
     endif()
 
 # ---- unknown command ------------------------------------------------------

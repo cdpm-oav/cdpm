@@ -124,7 +124,10 @@ add_unit_tests(MODULE cdpm_hash
         compute.compiler_version_changes_hash
         compute.patch_changes_hash
         compute.patch_applicability
+        compute.toolchain_file_identity
         compute.toolchain_var_changes_hash
+        compute.system_identities
+        compute.dependency_identities
 )
 
 add_unit_tests(MODULE cdpm_toolchain
@@ -134,11 +137,18 @@ add_unit_tests(MODULE cdpm_toolchain
         prepare.synthesize
 )
 
+add_unit_tests(MODULE cdpm_context
+    PASS
+        resolve.defaults
+        resolve.overrides
+)
+
 add_unit_tests(MODULE cdpm_build
     PASS
         prepare_source.local
         collect_patches.absolute
         collect_patches.applies_to
+        build.driver_validation_user_cleanup
         build.sentinel_skip
     FAIL
         build.unimplemented_driver
@@ -152,6 +162,10 @@ add_unit_tests(MODULE cdpm_lockfile
         write.idempotent_merge
         read.missing_file
         read.roundtrip
+        write.system_identities
+        write.graph_identities
+        write.local_is_dev
+        read.structural_validation
     FAIL
         read.bad_json
 )
@@ -167,9 +181,14 @@ add_unit_tests(MODULE cdpm_cps
 add_integration_tests(
     PASS
         build_cmake_driver
+        build_cmake_driver_security
         build_cmake_driver_patch
         build_cmake_driver_cps
+        build_failure_user_cleanup
+        cli_context
         provider_find_package
+        provider_graph
+        resolver_lock_modes
     NETWORK
         provider_fmt_e2e
 )
@@ -184,10 +203,13 @@ add_unit_tests(MODULE cdpm_config
         config_load.layer_merge
         generate_user_file.basic
         get_package_options.layers
+        get_package_system_dependencies.replacement
+        get_package_dependencies.replacement
         get_package_source.override_local
         get_package_source.repo_default
         get_package_user_kv.tracked_split
         load_repos.file_and_masks
+        load_repos.git_local_baseline
         merge_json.deep
         merge_json.remove_operator
         pkg_matches_masks
@@ -200,6 +222,38 @@ add_unit_tests(MODULE cdpm_config
         get_package_user_kv.missing_value
         load_repo.unknown_build_system
         load_repo.bad_version_range
+        load_repo.invalid_option_key
+        load_repo.invalid_rev
+        load_repo.invalid_sha256
         load_repos.git_missing_baseline
         load_repos.unknown_kind
+        load_repo.system_dependencies_bad_mode
+        load_repo.system_dependencies_bad_type
+        load_repo.system_dependencies_bad_targets
+        load_repo.system_dependencies_bad_identity_paths
+        load_repo.system_dependencies_overlap
+        load_repo.system_dependencies_unsafe_name
+        load_repo.system_dependencies_unknown_field
+        load_repo.managed_dependencies_unknown_field
+        load_repo.duplicate_find_name
+)
+
+add_unit_tests(MODULE cdpm_system_dependencies
+    PASS
+        probe.config_and_module
+    FAIL
+        probe.missing_identity_path
+        probe.symlink_identity_path
+)
+
+add_unit_tests(MODULE cdpm_resolve
+    PASS
+        resolve.shared_graph
+    FAIL
+        resolve.version_conflict
+        resolve.cycle
+        resolve.duplicate_alias
+)
+set_tests_properties(unit.cdpm_system_dependencies.probe.symlink_identity_path
+    PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP: symlink creation unsupported"
 )
