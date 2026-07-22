@@ -15,6 +15,8 @@ set(__CDPM_CPS_VERSION "0.14.1" CACHE INTERNAL "CPS schema revision emitted by c
 
 # JSON helpers (_cdpm_json_foreach / _cdpm_json_get), _cdpm_json_set_safe and cdpm_canonical_json.
 include(cdpm_config)
+# Host processor fallback for the platform.isa field in script mode.
+include(cdpm_utils)
 
 # .. rst:
 # ``_cdpm_cps_find_library(<install_dir> <component> <out_location>)``
@@ -91,15 +93,16 @@ function(_cdpm_cps_compose name version install_dir meta_json out_json)
 
     # platform.kernel / platform.isa. Guard with DEFINED first: in ``cmake -P`` script mode
     # CMAKE_SYSTEM_NAME/PROCESSOR are *undefined*, and ``if(NOT <undef> STREQUAL "")`` would treat the bare
-    # name as a literal string (non-empty) and wrongly emit an empty value. Fall back to the always-defined
-    # CMAKE_HOST_SYSTEM_* so the descriptor still records the platform outside a configured build.
+    # name as a literal string (non-empty) and wrongly emit an empty value. Fall back to the host system
+    # name and, via ``_cdpm_get_host_processor``, to the OS platform so the descriptor still records the
+    # platform outside a configured build.
     set(sys_name "${CMAKE_SYSTEM_NAME}")
     if(NOT DEFINED CMAKE_SYSTEM_NAME OR sys_name STREQUAL "")
         set(sys_name "${CMAKE_HOST_SYSTEM_NAME}")
     endif()
     set(sys_proc "${CMAKE_SYSTEM_PROCESSOR}")
     if(NOT DEFINED CMAKE_SYSTEM_PROCESSOR OR sys_proc STREQUAL "")
-        set(sys_proc "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+        _cdpm_get_host_processor(sys_proc)
     endif()
 
     set(platform "{}")

@@ -188,8 +188,16 @@ function(cdpm_compute_config_hash pkg_name pkg_version meta_json out_hash)
     endif()
 
     # ---- Platform / generator / build type --------------------------------------
+    set(sys_name "${CMAKE_SYSTEM_NAME}")
+    if(NOT DEFINED CMAKE_SYSTEM_NAME OR sys_name STREQUAL "")
+        set(sys_name "${CMAKE_HOST_SYSTEM_NAME}")
+    endif()
+    set(sys_proc "${CMAKE_SYSTEM_PROCESSOR}")
+    if(NOT DEFINED CMAKE_SYSTEM_PROCESSOR OR sys_proc STREQUAL "")
+        _cdpm_get_host_processor(sys_proc)
+    endif()
     string(APPEND parts
-        "|sys:${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
+        "|sys:${sys_name}-${sys_proc}"
         "|cfg:${CMAKE_BUILD_TYPE}"
         "|gen:${CMAKE_GENERATOR}")
 

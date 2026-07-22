@@ -11,6 +11,22 @@ cmake_policy(SET CMP0057 NEW)
 cmake_policy(SET CMP0007 NEW)
 
 # .. rst:
+# ``_cdpm_get_host_processor(<out_var>)``
+#
+# Returns the host processor name. Works in both project mode (reads
+# ``CMAKE_HOST_SYSTEM_PROCESSOR``) and script mode (falls back to
+# ``cmake_host_system_information``).
+function(_cdpm_get_host_processor out_var)
+    if(DEFINED CMAKE_HOST_SYSTEM_PROCESSOR AND NOT CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "")
+        set(${out_var} "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+        return(PROPAGATE ${out_var})
+    endif()
+    cmake_host_system_information(RESULT os_platform QUERY OS_PLATFORM)
+    set(${out_var} "${os_platform}")
+    return(PROPAGATE ${out_var})
+endfunction()
+
+# .. rst:
 # ``_cdpm_json_foreach(<json> <out_keys>)``
 #
 # Collects the member names of a JSON object into ``<out_keys>`` (a CMake list).
