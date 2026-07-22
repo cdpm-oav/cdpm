@@ -1961,9 +1961,23 @@ function(cdpm_get_package_source pkg_name meta_json version out_source_json out_
                 _cdpm_json_set_safe("${src}" "rev" "${rev}" "STRING" src)
             endif()
         elseif(src_type STREQUAL "url")
+            # Package-level url_template expands {version} into a concrete URL.
+            string(JSON url_template ERROR_VARIABLE tmpl_err GET "${meta_json}" "source" "url_template")
+            if(NOT tmpl_err AND NOT url_template STREQUAL "")
+                string(REPLACE "{version}" "${version}" expanded_url "${url_template}")
+                _cdpm_json_set_safe("${src}" "url" "${expanded_url}" "STRING" src)
+            endif()
+
+            # Fold in the version's integrity pin.
             string(JSON sha ERROR_VARIABLE sha_err GET "${meta_json}" "versions" "${version}" "sha256")
             if(NOT sha_err AND NOT sha STREQUAL "")
                 _cdpm_json_set_safe("${src}" "sha256" "${sha}" "STRING" src)
+            endif()
+
+            # Per-version URL override (takes precedence over url_template).
+            string(JSON ver_url ERROR_VARIABLE ver_url_err GET "${meta_json}" "versions" "${version}" "url")
+            if(NOT ver_url_err AND NOT ver_url STREQUAL "")
+                _cdpm_json_set_safe("${src}" "url" "${ver_url}" "STRING" src)
             endif()
         endif()
     endif()
