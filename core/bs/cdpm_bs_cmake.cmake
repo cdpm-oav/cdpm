@@ -198,13 +198,17 @@ function(cdpm_bs_cmake_build ctx_json)
             list(APPEND option_keys "${key}")
         endforeach()
     endif()
+    # Provider injection path; derived from the cdpm root cached by cdpm_build.cmake so it stays valid
+    # even when the caller's module_path is a multi-entry list.
+    set(__inject_file "${__CDPM_BUILD_ROOT}/core/cdpm_provider_inject.cmake")
+
     set(separator_index 0)
     set(search_separator ON)
     while(search_separator)
         set(list_separator "__CDPM_LIST_SEPARATOR_${separator_index}__")
         set(separator_found FALSE)
         foreach(value IN ITEMS "${install_dir}" "${build_type}" "${toolchain}" "${prefix_path}"
-                "${module_path}" "${user_file}")
+                "${module_path}" "${user_file}" "${__inject_file}" "${__CDPM_BUILD_ROOT}")
             string(FIND "${value}" "${list_separator}" separator_position)
             if(NOT separator_position EQUAL -1)
                 set(separator_found TRUE)
@@ -260,6 +264,36 @@ function(cdpm_bs_cmake_build ctx_json)
         string(APPEND cache_args_block "\n        ${cache_arg}")
     endif()
 
+    if(NOT module_path STREQUAL "")
+        _cdpm_cmake_quote_cache_argument(
+            "-DCMAKE_PROJECT_TOP_LEVEL_INCLUDES:FILEPATH=${__inject_file}" "${list_separator}" cache_arg
+        )
+        string(APPEND cache_args_block "\n        ${cache_arg}")
+        _cdpm_cmake_quote_cache_argument(
+            "-DCDPM_INJECT_ROOT:PATH=${__CDPM_BUILD_ROOT}" "${list_separator}" cache_arg
+        )
+        string(APPEND cache_args_block "\n        ${cache_arg}")
+    endif()
+
+    # Forward all CDPM_* cache variables to child builds so version overrides
+    # and other configuration options are visible to the provider.
+    get_cmake_property(__all_cache_vars CACHE_VARIABLES)
+    foreach(__cache_var IN LISTS __all_cache_vars)
+        if(__cache_var MATCHES "^CDPM_" AND NOT __cache_var MATCHES "^CDPM_PROVIDER_")
+            get_property(__cache_val CACHE "${__cache_var}" PROPERTY VALUE)
+            if(NOT __cache_val STREQUAL "")
+                get_property(__cache_type CACHE "${__cache_var}" PROPERTY TYPE)
+                if(__cache_type STREQUAL "")
+                    set(__cache_type "STRING")
+                endif()
+                _cdpm_cmake_quote_cache_argument(
+                    "-D${__cache_var}:${__cache_type}=${__cache_val}" "${list_separator}" cache_arg
+                )
+                string(APPEND cache_args_block "\n        ${cache_arg}")
+            endif()
+        endif()
+    endforeach()
+
     # Package options -> -D<KEY>:STRING=<VAL>. Booleans normalized to ON/OFF.
     foreach(key IN LISTS option_keys)
         if(NOT key MATCHES [[^[A-Za-z_][A-Za-z0-9_]*$]])
@@ -290,8 +324,6 @@ function(cdpm_bs_cmake_build ctx_json)
     string(APPEND ml "\n    LIST_SEPARATOR ${list_separator}")
     string(APPEND ml "\n    CMAKE_CACHE_ARGS")
     string(APPEND ml "\n${cache_args_block}")
-    string(APPEND ml "\n    # TODO(cdpm): forward CMAKE_PROJECT_TOP_LEVEL_INCLUDES to re-inject the provider")
-    string(APPEND ml "\n    #             so the child build can resolve its own transitive find_package().")
     string(APPEND ml "\n)")
     string(APPEND ml "\n")
     file(WRITE "${ep_root}/CMakeLists.txt" "${ml}")
