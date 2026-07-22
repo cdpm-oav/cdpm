@@ -110,7 +110,7 @@ file(READ "${tmp}/cdpm.lock.json" cli_lock)
 string(JSON cli_package_count LENGTH "${cli_lock}" packages)
 assert_eq("${cli_package_count}" 2 "CLI install records the full graph")
 
-# During replay, an undeclared nested request is fatal even when top-level fallback is enabled.
+# During replay, an undeclared nested request falls through to CMake's default find logic.
 file(MAKE_DIRECTORY "${tmp}/bad-consumer")
 file(WRITE "${tmp}/bad-consumer/CMakeLists.txt" [[cmake_minimum_required(VERSION 3.25)
 project(bad_consumer NONE)
@@ -120,8 +120,11 @@ execute_process(COMMAND "${CMAKE_COMMAND}" -S "${tmp}/bad-consumer" -B "${tmp}/b
     "-DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=${cdpm_root}/cdpm.cmake"
     "-DCDPM_PROJECT_CONFIG=${config}" "-DCDPM_STORE_DIR=${store}" -DCDPM_ALLOW_SYSTEM_PACKAGES=ON
     RESULT_VARIABLE bad_rc OUTPUT_VARIABLE bad_output ERROR_VARIABLE bad_error)
-if(bad_rc EQUAL 0 OR NOT "${bad_output}${bad_error}" MATCHES "not declared in that package graph")
-    message(FATAL_ERROR "FAIL: undeclared replay dependency was not rejected\n${bad_output}${bad_error}")
+if(bad_rc EQUAL 0)
+    message(FATAL_ERROR "FAIL: undeclared replay dependency should have failed to be found\n${bad_output}${bad_error}")
+endif()
+if("${bad_output}${bad_error}" MATCHES "not declared in that package graph")
+    message(FATAL_ERROR "FAIL: undeclared replay dependency was rejected by cdpm instead of falling through\n${bad_output}${bad_error}")
 endif()
 
 file(REMOVE_RECURSE "${tmp}")

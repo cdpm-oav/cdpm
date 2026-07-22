@@ -7,8 +7,8 @@
 # at the in-tree greet fixture, so the provider builds + installs it into a temp store and the
 # consumer's find_package finds the generated greetConfig.cmake.
 #
-# Also exercises the CDPM_ALLOW_SYSTEM_PACKAGES gate: an unknown package must be fatal when the gate
-# is OFF and must fall through (bypass) when it is ON.
+# Also exercises the provider fallback for unknown packages: an unknown REQUIRED package is handed
+# off to CMake's normal find_package, which produces the standard failure message.
 include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 # cdpm root = parent of the tests dir; the driver runs from there (WORKING_DIRECTORY).
@@ -34,19 +34,21 @@ if(DEFINED CMAKE_GENERATOR AND NOT CMAKE_GENERATOR STREQUAL "")
 endif()
 
 # ---- Local registry declaring greet (git source is a placeholder; never fetched because the
-#      consumer config supplies a local source_override that wins). ----------------------------
+#      consumer config supplies a local source_override that wins). -----------------------------
+file(MAKE_DIRECTORY "${tmp}/packages/greet")
+file(WRITE "${tmp}/packages/greet/package.json" [[{
+  "build_system": "cmake",
+  "source": { "type": "git", "url": "https://example.invalid/greet.git" },
+  "default_version": "1.0.0",
+  "versions": {
+    "1.0.0": { "rev": "0000000000000000000000000000000000000000" }
+  }
+}]])
 set(registry "${tmp}/packages.json")
 file(WRITE "${registry}" [[{
-  "repo_schema": 1,
+  "version": 1,
   "packages": {
-    "greet": {
-      "build_system": "cmake",
-      "source": { "type": "git", "url": "https://example.invalid/greet.git" },
-      "default_version": "1.0.0",
-      "versions": {
-        "1.0.0": { "rev": "0000000000000000000000000000000000000000" }
-      }
-    }
+    "greet": "packages/greet/package.json"
   }
 }]])
 
@@ -149,7 +151,8 @@ file(TIMESTAMP "${greet_slot}/.cdpm_installed" ts2)
 assert_eq("${ts1}" "${ts2}" "second configure is idempotent (sentinel unchanged)")
 
 # ---------------------------------------------------------------------------
-# Case 3: unknown package is fatal when CDPM_ALLOW_SYSTEM_PACKAGES is OFF.
+# Case 3: unknown REQUIRED package falls through to normal find_package and fails with CMake's
+# standard message.
 # ---------------------------------------------------------------------------
 set(unknown_consumer "${tmp}/unknown")
 file(MAKE_DIRECTORY "${unknown_consumer}")
@@ -171,18 +174,22 @@ execute_process(
     ERROR_VARIABLE err3
 )
 if(rc3 EQUAL 0)
-    message(FATAL_ERROR "FAIL: unknown package configure should have failed with the gate OFF")
+    message(FATAL_ERROR "FAIL: unknown package configure should have failed.\n${out3}${err3}")
 endif()
 string(FIND "${err3}${out3}" "CDPM_ALLOW_SYSTEM_PACKAGES" gate_hint)
-if(gate_hint EQUAL -1)
-    message(FATAL_ERROR "FAIL: fatal message should mention the CDPM_ALLOW_SYSTEM_PACKAGES gate.\n${err3}")
+if(NOT gate_hint EQUAL -1)
+    message(FATAL_ERROR "FAIL: unknown package error should not mention the CDPM_ALLOW_SYSTEM_PACKAGES gate.\n${err3}")
+endif()
+string(FIND "${err3}${out3}" "Could not find a package configuration file provided by" cmake_hint)
+if(cmake_hint EQUAL -1)
+    message(FATAL_ERROR "FAIL: unknown package error should be CMake's standard find_package message.\n${err3}")
 endif()
 
 # A strict provider can materialize a pinned local git registry without recursively asking itself for Git.
 find_program(git_executable NAMES git REQUIRED)
 set(git_registry "${tmp}/git-registry")
 file(MAKE_DIRECTORY "${git_registry}")
-file(WRITE "${git_registry}/packages.json" [[{"repo_schema":1,"packages":{}}]])
+    file(WRITE "${git_registry}/packages.json" [[{"version":1,"packages":{}}]])
 execute_process(COMMAND "${git_executable}" init -q WORKING_DIRECTORY "${git_registry}"
     COMMAND_ERROR_IS_FATAL ANY)
 execute_process(COMMAND "${git_executable}" add packages.json WORKING_DIRECTORY "${git_registry}"
@@ -199,11 +206,15 @@ execute_process(
     COMMAND "${CMAKE_COMMAND}" -S "${unknown_consumer}" -B "${tmp}/git-provider-build" ${gen_args}
         "-DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=${cdpm_entry}"
         "-DCDPM_STORE_DIR=${tmp}/git-store" "-DCDPM_PROJECT_CONFIG=${git_config}"
-        -DCDPM_ALLOW_SYSTEM_PACKAGES=OFF
     RESULT_VARIABLE git_provider_rc OUTPUT_VARIABLE git_provider_out ERROR_VARIABLE git_provider_err
 )
-if(git_provider_rc EQUAL 0 OR NOT "${git_provider_out}${git_provider_err}" MATCHES "not found in any loaded")
-    message(FATAL_ERROR "FAIL: strict provider did not reach normal package lookup with a git registry\n"
+if(git_provider_rc EQUAL 0)
+    message(FATAL_ERROR "FAIL: unknown REQUIRED package should still fail after registry materialization.\n"
+        "${git_provider_out}${git_provider_err}")
+endif()
+string(FIND "${git_provider_out}${git_provider_err}" "not found in any loaded" old_fatal)
+if(NOT old_fatal EQUAL -1)
+    message(FATAL_ERROR "FAIL: provider should not emit the old 'not found in any loaded' fatal message.\n"
         "${git_provider_out}${git_provider_err}")
 endif()
 if(NOT EXISTS "${tmp}/git-store/repos/${git_baseline}/packages.json")
@@ -211,4 +222,4 @@ if(NOT EXISTS "${tmp}/git-store/repos/${git_baseline}/packages.json")
 endif()
 
 file(REMOVE_RECURSE "${tmp}")
-message(STATUS "PASS: cdpm provider resolves find_package end-to-end, is idempotent, and gates unknown packages")
+message(STATUS "PASS: cdpm provider resolves find_package end-to-end, is idempotent, and falls back for unknown packages")

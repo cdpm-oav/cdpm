@@ -20,15 +20,10 @@ macro(cdpm_provide_dependency method_type)
     get_property(_cdpm_replay_active GLOBAL PROPERTY CDPM_PROVIDER_REPLAY_ACTIVE)
     if(_cdpm_replay_active AND "${method_type}" STREQUAL "FIND_PACKAGE")
         string(TOLOWER "${ARGV1}" _cdpm_replay_name)
-        get_property(_cdpm_replay_allowed GLOBAL PROPERTY CDPM_PROVIDER_REPLAY_ALLOWED)
-        if(_cdpm_replay_name IN_LIST _cdpm_replay_allowed)
-            find_package(${ARGN} BYPASS_PROVIDER)
-        else()
-            message(FATAL_ERROR "[cdpm] Package '${ARGV1}' was requested while replaying a managed package, but "
-                "it is not declared in that package graph.")
-        endif()
+        # Not a managed package in this graph — let CMake's default find logic handle it.
+        # If REQUIRED and not found, find_package will fatal on its own.
+        find_package(${ARGN} BYPASS_PROVIDER)
         unset(_cdpm_replay_name)
-        unset(_cdpm_replay_allowed)
         unset(_cdpm_replay_active)
     elseif(CDPM_DISABLE OR CDPM_BYPASS OR NOT "${method_type}" STREQUAL "FIND_PACKAGE")
         find_package(${ARGN} BYPASS_PROVIDER)
@@ -54,12 +49,7 @@ macro(cdpm_provide_dependency method_type)
 
             cdpm_find_package_in_repo("${_cdpm_pkg_name}" _cdpm_known _cdpm_pkg_key _cdpm_meta)
             if(NOT _cdpm_known)
-                if(CDPM_ALLOW_SYSTEM_PACKAGES)
-                    message(STATUS "[cdpm] '${_cdpm_pkg_name}' not in registry -- falling back to system find_package.")
-                else()
-                    message(FATAL_ERROR "[cdpm] Package '${_cdpm_pkg_name}' not found in any loaded repository.\n"
-                        "Set CDPM_ALLOW_SYSTEM_PACKAGES=ON to allow a system find_package fallback.")
-                endif()
+                # Package not in any loaded repository; let the default find_package below handle it.
             else()
                 cdpm_resolve_and_build("${_cdpm_pkg_key}" "${_cdpm_req_ver}" _cdpm_context)
                 string(JSON _cdpm_install_dir GET "${_cdpm_context}" install_dir)
