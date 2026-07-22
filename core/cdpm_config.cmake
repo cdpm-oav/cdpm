@@ -1596,6 +1596,10 @@ endfunction()
 #   4. ``cdpm.lock.json`` pin (the cached ``CDPM_LOCKFILE_JSON`` global, when a lockfile was loaded)
 #   5. ``meta_json.default_version`` from the repository
 #
+# The lockfile is treated as a cache of previous resolutions, not a hard constraint. It is therefore skipped
+# when a higher-priority source is in effect, and also when the user passes ``--no-lockfile`` on the CLI
+# (which sets ``CDPM_SKIP_LOCKFILE``).
+#
 # The chosen version must exist in ``meta_json.versions``. ``<requested_version>`` (possibly empty) is the
 # find_package constraint; if non-empty it is validated via :cmake:command:`_cdpm_version_satisfies`
 # against the chosen version's ``compat_version``. A failure is fatal and names the selection source.
@@ -1611,6 +1615,7 @@ function(cdpm_resolve_version pkg_name meta_json requested_version out_version o
     set(selected "")
     set(source "")
 
+    # An explicit CDPM_<PKG>_VERSION cache variable overrides everything, including stale lockfile pins.
     if(DEFINED CDPM_${upper}_VERSION AND NOT CDPM_${upper}_VERSION STREQUAL "")
         set(selected "${CDPM_${upper}_VERSION}")
         set(source "CDPM_${upper}_VERSION cache variable")
@@ -1627,11 +1632,12 @@ function(cdpm_resolve_version pkg_name meta_json requested_version out_version o
         endif()
     endif()
 
-    # --- Step 4: a version pinned by the lockfile (if present and not contradicting 1-3) ----
+    # --- Step 4: a version pinned by the lockfile (lowest priority, skipped when
+    # --no-lockfile is in effect or when a higher-priority source already selected) ----
     # Read the cached lockfile JSON directly from the global property so this module needs no dependency
     # on cdpm_lockfile (which itself includes cdpm_config). The property is populated by
     # cdpm_read_lockfile(); absent when no lockfile was loaded, in which case this step is skipped.
-    if(selected STREQUAL "")
+    if(selected STREQUAL "" AND NOT CDPM_SKIP_LOCKFILE)
         get_property(lock GLOBAL PROPERTY CDPM_LOCKFILE_JSON)
         if(lock)
             string(JSON lock_ver ERROR_VARIABLE lock_err GET "${lock}" "packages" "${name}" "version")

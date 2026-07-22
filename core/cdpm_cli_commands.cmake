@@ -129,6 +129,8 @@ Global options (must appear before the command):
                                    Relative paths are resolved from the invocation working directory.
   --build-type <type>              Child build type (default: CMAKE_BUILD_TYPE, then Release).
                                    Affects config-hash computation and child builds.
+  --no-lockfile                    Ignore cdpm.lock.json pins; resolve versions from config,
+                                   cache variables, and repository defaults instead.
 
 Commands:
   help                             Show this help message

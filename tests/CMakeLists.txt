@@ -212,6 +212,8 @@ add_unit_tests(MODULE cdpm_config
         get_package_source.repo_default
         get_package_user_kv.tracked_split
         load_repos.file_and_masks
+        resolve_version.cache_override_skips_lockfile
+        resolve_version.no_lockfile_flag_skips_lockfile
         load_repos.force_resets_registry
         load_repos.git_local_baseline
         merge_json.deep
