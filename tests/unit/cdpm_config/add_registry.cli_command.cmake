@@ -15,9 +15,12 @@ set(CDPM_PROJECT_CONFIG "${tmp}/cdpm.json")
 set(CDPM_USER_CONFIG    "")
 
 # A minimal valid registry: a local-source package needs no per-version integrity pin.
+file(MAKE_DIRECTORY "${tmp}/packages/demo")
+file(WRITE "${tmp}/packages/demo/package.json"
+[[{"source":{"type":"local","url":"/tmp/demo-src"},"default_version":"1.0.0","versions":{"1.0.0":{}}}]])
 set(registry "${tmp}/packages.json")
 file(WRITE "${registry}"
-[[{"repo_schema":1,"packages":{"demo":{"source":{"type":"local","url":"/tmp/demo-src"},"default_version":"1.0.0","versions":{"1.0.0":{}}}}}]])
+[[{"version":1,"packages":{"demo":"packages/demo/package.json"}}]])
 cmake_path(ABSOLUTE_PATH registry NORMALIZE OUTPUT_VARIABLE registry_abs)
 
 # --- machine scope: a fresh config file is created carrying the repos[] entry ---------------

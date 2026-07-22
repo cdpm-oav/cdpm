@@ -9,9 +9,9 @@ file(REMOVE_RECURSE "${tmp}")
 file(MAKE_DIRECTORY "${tmp}/valid/demo" "${tmp}/invalid/demo")
 file(WRITE "${tmp}/valid/demo/package.json" [[{"source":{"type":"git","url":"https://example.test/demo.git"},
 "versions":{"1":{"rev":"0123456789abcdef0123456789abcdef01234567"}}}]])
-file(WRITE "${tmp}/valid/packages.json" [[{"repo_schema":2,"packages":{"demo":"demo/package.json"}}]])
+file(WRITE "${tmp}/valid/packages.json" [[{"version":1,"packages":{"demo":"demo/package.json"}}]])
 file(WRITE "${tmp}/invalid/demo/package.json" "not-json")
-file(WRITE "${tmp}/invalid/packages.json" [[{"repo_schema":2,"packages":{"demo":"demo/package.json"}}]])
+file(WRITE "${tmp}/invalid/packages.json" [[{"version":1,"packages":{"demo":"demo/package.json"}}]])
 file(SHA256 "${tmp}/valid/packages.json" before)
 
 execute_process(COMMAND "${CMAKE_COMMAND}" -P "${cli}" -- help RESULT_VARIABLE help_result

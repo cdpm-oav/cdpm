@@ -5,10 +5,13 @@ include(cdpm_config)
 set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/repo_bad_bs")
 file(REMOVE_RECURSE "${tmp}")
 file(MAKE_DIRECTORY "${tmp}")
-file(WRITE "${tmp}/packages.json"
-[[{"repo_schema":1,"packages":{"gmp":{"build_system":"frobnicate",
+file(MAKE_DIRECTORY "${tmp}/packages/gmp")
+file(WRITE "${tmp}/packages/gmp/package.json"
+[[{"build_system":"frobnicate",
 "source":{"type":"url","url":"https://example/gmp.tar.gz"},
-"versions":{"6.3.0":{"sha256":"abc"}}}}}]])
+"versions":{"6.3.0":{"sha256":"abc"}}}]])
+file(WRITE "${tmp}/packages.json"
+[[{"version":1,"packages":{"gmp":"packages/gmp/package.json"}}]])
 
 # Expected to abort with FATAL_ERROR (registered WILL_FAIL TRUE).
 cdpm_load_repo("${tmp}/packages.json")

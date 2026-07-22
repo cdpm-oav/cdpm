@@ -12,8 +12,8 @@ file(WRITE "${tmp}/first/pkg/package.json" [[{"find_package_name":"FirstAlias",
 file(WRITE "${tmp}/second/pkg/package.json" [[{"find_package_name":"SecondAlias",
 "source":{"type":"git","url":"https://second.test/pkg.git"},
 "versions":{"1":{"rev":"0123456789abcdef0123456789abcdef01234567"}}}]])
-file(WRITE "${tmp}/first/packages.json" [[{"repo_schema":2,"packages":{"first":"pkg/package.json"}}]])
-file(WRITE "${tmp}/second/packages.json" [[{"repo_schema":2,"packages":{"second":"pkg/package.json"}}]])
+file(WRITE "${tmp}/first/packages.json" [[{"version":1,"packages":{"first":"pkg/package.json"}}]])
+file(WRITE "${tmp}/second/packages.json" [[{"version":1,"packages":{"second":"pkg/package.json"}}]])
 
 set(CDPM_MACHINE_CONFIG "")
 set(CDPM_USER_CONFIG "")
@@ -41,7 +41,7 @@ assert_true("${second_found}" "the replacement CDPM_REPO_JSON is loaded")
 _cdpm_registry_get_provenance(first old_provenance_found old_provenance)
 assert_false("${old_provenance_found}" "old materialization provenance is cleared")
 get_property(old_descriptor GLOBAL PROPERTY "CDPM_SCHEMA2_${first_id}_PACKAGES")
-assert_empty("${old_descriptor}" "old schema-2 descriptor properties are cleared")
+assert_empty("${old_descriptor}" "old descriptor properties are cleared")
 
 file(REMOVE_RECURSE "${tmp}")
 message(STATUS "PASS: FORCE config reload starts a clean registry lifecycle")

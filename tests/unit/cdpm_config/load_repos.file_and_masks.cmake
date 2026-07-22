@@ -9,12 +9,17 @@ file(REMOVE_RECURSE "${tmp}")
 file(MAKE_DIRECTORY "${tmp}")
 
 # A repo file with two packages; the mask only owns 'fmt'.
+file(MAKE_DIRECTORY "${tmp}/packages/fmt" "${tmp}/packages/zlib")
+file(WRITE "${tmp}/packages/fmt/package.json"
+[[{"source":{"type":"git","url":"https://example/fmt.git"},
+"versions":{"1.0.0":{"rev":"deadbeefcafedeadbeefcafedeadbeefdeadbeef"}}}]])
+file(WRITE "${tmp}/packages/zlib/package.json"
+[[{"source":{"type":"git","url":"https://example/zlib.git"},
+"versions":{"1.0.0":{"rev":"cafedeadbeefcafedeadbeefcafedeadbeefcafe"}}}]])
 file(WRITE "${tmp}/packages.json"
-[[{"repo_schema":1,"packages":{
-"fmt":{"source":{"type":"git","url":"https://example/fmt.git"},
-"versions":{"1.0.0":{"rev":"deadbeefcafedeadbeefcafedeadbeefdeadbeef"}}},
-"zlib":{"source":{"type":"git","url":"https://example/zlib.git"},
-"versions":{"1.0.0":{"rev":"cafedeadbeefcafedeadbeefcafedeadbeefcafe"}}}}}]])
+[[{"version":1,"packages":{
+"fmt":"packages/fmt/package.json",
+"zlib":"packages/zlib/package.json"}}]])
 
 # Project config declaring the file repo with a 'fmt' ownership mask.
 file(WRITE "${tmp}/cdpm.json"

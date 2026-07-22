@@ -42,16 +42,20 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/build-context.txt" DESTINATION ".")
 install(DIRECTORY include/ DESTINATION include)
 ]=])
 
+file(MAKE_DIRECTORY "${project}/registry/packages/greet")
+file(WRITE "${project}/registry/packages/greet/package.json" [=[
+{
+  "build_system": "cmake",
+  "source": { "type": "local", "url": "./fixture" },
+  "default_version": "1.0.0",
+  "versions": { "1.0.0": {} }
+}
+]=])
 file(WRITE "${project}/registry/packages.json" [=[
 {
-  "repo_schema": 1,
+  "version": 1,
   "packages": {
-    "greet": {
-      "build_system": "cmake",
-      "source": { "type": "local", "url": "./fixture" },
-      "default_version": "1.0.0",
-      "versions": { "1.0.0": {} }
-    }
+    "greet": "packages/greet/package.json"
   }
 }
 ]=])

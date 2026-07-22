@@ -9,7 +9,7 @@ foreach(name IN ITEMS alpha zeta)
         "{\"find_package_name\":\"SharedAlias\",\"source\":{\"type\":\"git\",\"url\":\"https://example.test/${name}.git\"},\"versions\":{\"1\":{\"rev\":\"0123456789abcdef0123456789abcdef01234567\"}}}")
 endforeach()
 file(WRITE "${tmp}/packages.json"
-    [[{"repo_schema":2,"packages":{"zeta":"zeta/package.json","alpha":"alpha/package.json"}}]])
+    [[{"version":1,"packages":{"zeta":"zeta/package.json","alpha":"alpha/package.json"}}]])
 
 cdpm_load_repo("${tmp}/packages.json")
 cdpm_find_package_in_repo(SharedAlias found package_key meta)

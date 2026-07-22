@@ -8,7 +8,7 @@ file(WRITE "${tmp}/packages/good/package.json" [[{"source":{"type":"git","url":"
 "versions":{"1":{"rev":"0123456789abcdef0123456789abcdef01234567"}}}]])
 file(WRITE "${tmp}/packages/bad/package.json" "not-json")
 file(WRITE "${tmp}/packages.json"
-    [[{"repo_schema":2,"packages":{"bad":"packages/bad/package.json","good":"packages/good/package.json"}}]])
+    [[{"version":1,"packages":{"bad":"packages/bad/package.json","good":"packages/good/package.json"}}]])
 
 cdpm_load_repo("${tmp}/packages.json")
 cdpm_find_in_repo(good found meta)
@@ -17,4 +17,4 @@ string(JSON url GET "${meta}" source url)
 assert_eq("${url}" "https://example.test/good.git" "exact lookup returns the selected manifest")
 
 file(REMOVE_RECURSE "${tmp}")
-message(STATUS "PASS: schema-2 exact lookup reads only the selected manifest")
+message(STATUS "PASS: manifest-index exact lookup reads only the selected manifest")

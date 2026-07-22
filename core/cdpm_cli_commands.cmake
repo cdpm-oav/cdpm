@@ -215,7 +215,7 @@ function(cdpm_cmd_info pkg_name)
         )
     endif()
     cdpm_config_load()
-    # Register declared repositories (kind=file|git); schema-2 metadata materializes on lookup.
+    # Register declared repositories (kind=file|git); manifest metadata materializes on lookup.
     cdpm_load_repos()
 
     cdpm_find_in_repo("${pkg_name}" __found __meta_json)

@@ -12,16 +12,16 @@ file(WRITE "${tmp}/packages/canonical/package.json" [[{
 "default_version":"1.0.0","versions":{"1.0.0":{"rev":"0123456789abcdef0123456789abcdef01234567",
 "patches":["patches/fix.diff"]}}}]])
 file(WRITE "${tmp}/packages.json"
-    [[{"repo_schema":2,"packages":{"canonical":"packages/canonical/package.json"}}]])
+    [[{"version":1,"packages":{"canonical":"packages/canonical/package.json"}}]])
 set_property(GLOBAL PROPERTY CDPM_MERGED_REPO "")
 set_property(GLOBAL PROPERTY CDPM_REPO_PROVENANCE "")
 cdpm_load_repo("${tmp}/packages.json")
 
 cdpm_find_package_in_repo(PublicAlias found package_key meta)
-assert_true("${found}" "schema-2 find_package alias resolves")
+assert_true("${found}" "manifest-index find_package alias resolves")
 assert_eq("${package_key}" canonical "alias lookup returns the canonical package key")
 _cdpm_registry_get_provenance("${package_key}" provenance_found provenance)
-assert_true("${provenance_found}" "canonical key owns schema-2 provenance")
+assert_true("${provenance_found}" "canonical key owns manifest-index provenance")
 _cdpm_registry_get_provenance(PublicAlias alias_provenance_found unused)
 assert_false("${alias_provenance_found}" "alias does not create a second provenance identity")
 _cdpm_registry_resolve_patch_path("${package_key}" "patches/fix.diff" patch)
@@ -58,4 +58,4 @@ string(JSON unused ERROR_VARIABLE alias_lock_err GET "${lock}" packages PublicAl
 assert_true("${alias_lock_err}" "resolver lock does not contain an alias identity")
 
 file(REMOVE_RECURSE "${tmp}")
-message(STATUS "PASS: schema-2 aliases retain canonical identity and provenance")
+message(STATUS "PASS: manifest-index aliases retain canonical identity and provenance")

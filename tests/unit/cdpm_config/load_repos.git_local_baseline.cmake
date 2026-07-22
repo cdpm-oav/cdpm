@@ -7,7 +7,7 @@ find_program(git_executable NAMES git REQUIRED)
 set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/git-local-baseline")
 file(REMOVE_RECURSE "${tmp}")
 file(MAKE_DIRECTORY "${tmp}/repo")
-file(WRITE "${tmp}/repo/packages.json" [[{"repo_schema":1,"packages":{}}]])
+file(WRITE "${tmp}/repo/packages.json" [[{"version":1,"packages":{}}]])
 execute_process(COMMAND "${git_executable}" init -q WORKING_DIRECTORY "${tmp}/repo" COMMAND_ERROR_IS_FATAL ANY)
 execute_process(COMMAND "${git_executable}" add packages.json WORKING_DIRECTORY "${tmp}/repo"
     COMMAND_ERROR_IS_FATAL ANY)

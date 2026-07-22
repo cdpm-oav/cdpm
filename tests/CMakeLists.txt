@@ -128,7 +128,7 @@ add_unit_tests(MODULE cdpm_hash
         compute.toolchain_var_changes_hash
         compute.system_identities
         compute.dependency_identities
-        compute.schema2_manifest_patch
+        compute.manifest_patch
 )
 
 add_unit_tests(MODULE cdpm_toolchain
@@ -149,8 +149,7 @@ add_unit_tests(MODULE cdpm_build
         prepare_source.local
         collect_patches.absolute
         collect_patches.applies_to
-        collect_patches.schema2_manifest_relative
-        collect_patches.schema1_project_relative
+        collect_patches.manifest_relative
         build.driver_validation_user_cleanup
         build.sentinel_skip
     FAIL
@@ -246,16 +245,12 @@ add_unit_tests(MODULE cdpm_config
 
 add_unit_tests(MODULE cdpm_registry
     PASS
-        load.valid_schema2
-        load.schema1_compatibility
+        load.valid
         load.alias_canonical
         load.alias_deterministic_duplicate
         load.selective_direct
-        load.schema2_masks_overlay
-        load.schema2_repeated_masks
-        load.schema_equivalence
-        convert.wrapper_deterministic
-        convert.production_equivalence
+        load.masks_overlay
+        load.repeated_masks
         load.root_index_fifo
         validate.api
         validate.cli
@@ -274,11 +269,6 @@ add_unit_tests(MODULE cdpm_registry
         load.patch_symlink_escape
         load.manifest_fifo
         load.patch_fifo
-        convert.destination_uncontrolled
-        convert.patch_missing
-        convert.patch_absolute
-        convert.patch_traversal
-        convert.malformed_input
 )
 set_tests_properties(
     unit.cdpm_registry.load.manifest_symlink_escape

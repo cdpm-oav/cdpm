@@ -19,6 +19,6 @@ if(NOT fifo_result EQUAL 0)
 endif()
 file(WRITE "${tmp}/package.json" [[{"source":{"type":"git","url":"https://example.test/demo.git"},
 "versions":{"1":{"rev":"0123456789abcdef0123456789abcdef01234567","patches":["patches/fix.diff"]}}}]])
-file(WRITE "${tmp}/packages.json" [[{"repo_schema":2,"packages":{"demo":"package.json"}}]])
+file(WRITE "${tmp}/packages.json" [[{"version":1,"packages":{"demo":"package.json"}}]])
 cdpm_load_repo("${tmp}/packages.json")
 cdpm_find_in_repo(demo found meta)

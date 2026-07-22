@@ -1261,7 +1261,7 @@ endfunction()
 # ``cdpm_load_repo(<repo_file> [PACKAGES <masks_json>])``
 #
 # Loads, validates, and registers one package repository file (``packages.json``). Validation covers:
-# ``repo_schema`` dispatch (schema 1 aggregate or schema 2 manifest index), structural checks, per-package
+# ``version`` dispatch (version 1 manifest index), structural checks, per-package
 # source/integrity rules, and ``@ref`` bans. Package keys are normalized to lower-case; a collision after
 # normalization is a fatal error.
 #
@@ -1269,8 +1269,8 @@ endfunction()
 # (``["boost-*", "openssl"]``); only packages matching a mask are registered from this file
 # (see :cmake:command:`_cdpm_pkg_matches_masks`). An absent/empty array registers every package.
 #
-# Schema-1 packages and materialized schema-2 packages accumulate into the legacy ``CDPM_MERGED_REPO`` facade.
-# Private schema-2 descriptors preserve first-registration-wins before manifests are read.
+# Manifest-index packages accumulate into the legacy ``CDPM_MERGED_REPO`` facade.
+# Private lazy descriptors preserve first-registration-wins before manifests are read.
 #
 # This materializes a repository whose ``packages.json`` is already on disk (``kind: file`` directly, or
 # ``kind: git`` after the baseline clone performed by :cmake:command:`cdpm_load_repos`).
@@ -1400,7 +1400,8 @@ endfunction()
 # ``cdpm_load_repos()``
 #
 # Walks the priority-ordered ``repos`` list produced by :cmake:command:`cdpm_config_load`
-# (``CDPM_REPO_JSON``) and registers each repository. Schema 1 is eager; schema 2 records lazy descriptors. Dispatch by
+# (``CDPM_REPO_JSON``) and registers each repository. The manifest-index reader eagerly validates the root index and
+# records lazy manifest descriptors. Dispatch by
 # ``kind``:
 #
 # * ``file`` - ``path`` resolved relative to the project directory when not absolute, loaded directly.

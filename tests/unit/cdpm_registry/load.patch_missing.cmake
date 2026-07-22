@@ -4,6 +4,6 @@ init_registry_fixture(patch_missing tmp)
 file(WRITE "${tmp}/packages/demo/package.json" [[{"source":{"type":"git","url":"https://example.test/demo.git"},
 "versions":{"1.0.0":{"rev":"0123456789abcdef0123456789abcdef01234567",
 "patches":["patches/missing.diff"]}}}]])
-file(WRITE "${tmp}/packages.json" [[{"repo_schema":2,"packages":{"demo":"packages/demo/package.json"}}]])
+file(WRITE "${tmp}/packages.json" [[{"version":1,"packages":{"demo":"packages/demo/package.json"}}]])
 cdpm_load_repo("${tmp}/packages.json")
 cdpm_find_in_repo(demo found meta)

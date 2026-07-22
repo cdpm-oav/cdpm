@@ -7,7 +7,7 @@ file(MAKE_DIRECTORY "${tmp}/valid/demo" "${tmp}/malformed/good" "${tmp}/malforme
 set(manifest [[{"source":{"type":"git","url":"https://example.test/demo.git"},
 "versions":{"1":{"rev":"0123456789abcdef0123456789abcdef01234567"}}}]])
 file(WRITE "${tmp}/valid/demo/package.json" "${manifest}")
-file(WRITE "${tmp}/valid/packages.json" [[{"repo_schema":2,"packages":{"demo":"demo/package.json"}}]])
+file(WRITE "${tmp}/valid/packages.json" [[{"version":1,"packages":{"demo":"demo/package.json"}}]])
 file(SHA256 "${tmp}/valid/packages.json" before_index)
 file(SHA256 "${tmp}/valid/demo/package.json" before_manifest)
 
@@ -23,12 +23,12 @@ assert_eq("${after_manifest}" "${before_manifest}" "validation does not mutate m
 file(WRITE "${tmp}/malformed/good/package.json" "${manifest}")
 file(WRITE "${tmp}/malformed/bad/package.json" "not-json")
 file(WRITE "${tmp}/malformed/packages.json"
-    [[{"repo_schema":2,"packages":{"good":"good/package.json","bad":"bad/package.json"}}]])
+    [[{"version":1,"packages":{"good":"good/package.json","bad":"bad/package.json"}}]])
 cdpm_validate_registry("${tmp}/malformed" malformed_valid diagnostics)
 assert_false("${malformed_valid}" "full validation catches an unrelated malformed manifest")
 assert_match("${diagnostics}" "package 'bad'.*not a JSON object" "malformed manifest diagnostic identifies canonical key")
 
-file(WRITE "${tmp}/unsafe/packages.json" [[{"repo_schema":2,"packages":{"demo":"../outside.json"}}]])
+file(WRITE "${tmp}/unsafe/packages.json" [[{"version":1,"packages":{"demo":"../outside.json"}}]])
 cdpm_validate_registry("${tmp}/unsafe" unsafe_valid diagnostics)
 assert_false("${unsafe_valid}" "full validation catches an unsafe manifest path")
 assert_match("${diagnostics}" "must not contain '\.\.'" "unsafe path diagnostic is clear")
