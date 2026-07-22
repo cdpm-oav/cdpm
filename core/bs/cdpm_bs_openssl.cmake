@@ -147,6 +147,10 @@ function(cdpm_bs_openssl_build ctx_json)
         string(JSON source      GET "${ctx_json}" "source")
         string(JSON src_type    GET "${source}" "type")
 
+        # If a previous "cdpm clean" removed the install directory but left ExternalProject stamps behind,
+        # wipe the stamps so the install step actually runs this time.
+        _cdpm_invalidate_ep_stamps("${build_dir}" "${install_dir}")
+
         # Optional members default to empty when absent.
         foreach(member toolchain build_type prefix_path module_path user_file)
             string(JSON ${member} ERROR_VARIABLE e_member GET "${ctx_json}" "${member}")

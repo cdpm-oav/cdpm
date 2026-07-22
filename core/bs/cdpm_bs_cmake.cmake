@@ -103,6 +103,10 @@ function(cdpm_bs_cmake_build ctx_json)
     string(JSON source      GET "${ctx_json}" "source")
     string(JSON src_type    GET "${source}" "type")
 
+    # If a previous "cdpm clean" removed the install directory but left ExternalProject stamps behind,
+    # wipe the stamps so the install step actually runs this time.
+    _cdpm_invalidate_ep_stamps("${build_dir}" "${install_dir}")
+
     # Optional members default to empty (or "{}" for options) when absent.
     string(JSON options ERROR_VARIABLE e_opts GET "${ctx_json}" "options")
     if(e_opts)
