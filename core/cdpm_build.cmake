@@ -239,6 +239,11 @@ function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
     _cdpm_json_set_safe("${ctx}" "module_path"  "${CMAKE_MODULE_PATH}"  "STRING" ctx)
     _cdpm_json_set_safe("${ctx}" "user_file"    "${user_file}"          "STRING" ctx)
 
+    string(JSON __build_obj ERROR_VARIABLE __build_err GET "${meta_json}" "build")
+    if(NOT __build_err)
+        string(JSON ctx SET "${ctx}" "build" "${__build_obj}")
+    endif()
+
     message(STATUS "[cdpm] building ${name}@${pkg_version} [${config_hash}] via '${bs}' driver")
     cmake_language(CALL "cdpm_bs_${bs}_build" "${ctx}")
 
