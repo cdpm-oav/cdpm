@@ -156,6 +156,7 @@ add_unit_tests(MODULE cdpm_build
         build.sentinel_skip
         build.autotools_configure_args
         build.host_context
+        build.archive_cache_dir
     FAIL
         build.unimplemented_driver
 )

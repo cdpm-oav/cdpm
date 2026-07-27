@@ -77,11 +77,18 @@ function(_cdpm_bs_quote_command_block items out)
 endfunction()
 
 # .. rst:
-# ``_cdpm_bs_download_lines(<source_json> <out_var>)``
+# ``_cdpm_bs_download_lines(<source_json> <out_var> [<archive_cache_dir>])``
 #
 # Generates an ExternalProject download block for a source object of type ``git``, ``url``, or
 # ``local``. The returned lines are indented for direct inclusion in ``ExternalProject_Add``.
+# For URL sources, an optional ``<archive_cache_dir>`` enables ``DOWNLOAD_DIR`` so the same archive
+# can be reused across packages.
 function(_cdpm_bs_download_lines source_json out)
+    set(archive_cache_dir "")
+    if(ARGC GREATER 2)
+        set(archive_cache_dir "${ARGV2}")
+    endif()
+
     string(JSON src_type GET "${source_json}" "type")
 
     if(src_type STREQUAL "git")
@@ -103,6 +110,10 @@ function(_cdpm_bs_download_lines source_json out)
         endif()
         _cdpm_bs_quote_external_project_value("${url}" url_q)
         set(lines "    URL ${url_q}\n    URL_HASH SHA256=${sha}")
+        if(NOT archive_cache_dir STREQUAL "")
+            _cdpm_bs_quote_external_project_value("${archive_cache_dir}" archive_cache_dir_q)
+            string(APPEND lines "\n    DOWNLOAD_DIR ${archive_cache_dir_q}")
+        endif()
     elseif(src_type STREQUAL "local")
         string(JSON path GET "${source_json}" "path")
         _cdpm_bs_quote_external_project_value("${path}" path_q)

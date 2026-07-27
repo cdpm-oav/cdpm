@@ -52,6 +52,39 @@ function(_cdpm_invalidate_ep_stamps build_dir install_dir)
 endfunction()
 
 # .. rst:
+# ``_cdpm_resolve_archive_cache_dir(<source_json> <out_dir>)``
+#
+# Returns a shared cache directory path for URL-type sources, keyed by SHA-256.
+# For git/local sources, or URL sources without a SHA-256 pin, returns an empty
+# string. The path lives under ``CDPM_CACHE_PATH`` (falling back to
+# ``${CMAKE_BINARY_DIR}/.cdpm``) so already-downloaded archives can be reused
+# across packages: ``<cache_root>/.cdpm_archives/<sha256[:16]>/``.
+function(_cdpm_resolve_archive_cache_dir source_json out_dir)
+    string(JSON src_type ERROR_VARIABLE type_err GET "${source_json}" "type")
+    if(type_err OR NOT src_type STREQUAL "url")
+        set(${out_dir} "")
+        return(PROPAGATE ${out_dir})
+    endif()
+
+    string(JSON sha ERROR_VARIABLE sha_err GET "${source_json}" "sha256")
+    if(sha_err OR sha STREQUAL "")
+        set(${out_dir} "")
+        return(PROPAGATE ${out_dir})
+    endif()
+
+    if(DEFINED CDPM_CACHE_PATH AND NOT CDPM_CACHE_PATH STREQUAL "")
+        set(cache_root "${CDPM_CACHE_PATH}")
+    else()
+        set(cache_root "${CMAKE_BINARY_DIR}/.cdpm")
+    endif()
+
+    string(SUBSTRING "${sha}" 0 16 hash_prefix)
+    string(TOLOWER "${hash_prefix}" hash_prefix)
+    set(${out_dir} "${cache_root}/.cdpm_archives/${hash_prefix}")
+    return(PROPAGATE ${out_dir})
+endfunction()
+
+# .. rst:
 # ``cdpm_prepare_source(<pkg_name> <pkg_version> <meta_json> <out_source_json>)``
 #
 # Resolves the fetch source for ``<pkg_name>`` at ``<pkg_version>`` and returns it as a normalized JSON
@@ -256,11 +289,13 @@ function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
     endif()
 
     # ---- Assemble the driver context -------------------------------------------
+    _cdpm_resolve_archive_cache_dir("${source_json}" archive_cache_dir)
     set(ctx "{}")
     _cdpm_json_set_safe("${ctx}" "profile"      "${arg_PROFILE}"        "STRING" ctx)
     _cdpm_json_set_safe("${ctx}" "build_dir"    "${build_dir}"          "STRING" ctx)
     _cdpm_json_set_safe("${ctx}" "install_dir"  "${install_dir}"        "STRING" ctx)
     string(JSON ctx SET "${ctx}" "source"       "${source_json}")
+    _cdpm_json_set_safe("${ctx}" "archive_cache_dir" "${archive_cache_dir}" "STRING" ctx)
     string(JSON ctx SET "${ctx}" "patches"      "${patches_json}")
     string(JSON ctx SET "${ctx}" "options"      "${options}")
     _cdpm_json_set_safe("${ctx}" "toolchain"    "${toolchain}"          "STRING" ctx)

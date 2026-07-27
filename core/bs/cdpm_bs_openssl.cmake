@@ -115,7 +115,7 @@ function(cdpm_bs_openssl_build ctx_json)
         _cdpm_invalidate_ep_stamps("${build_dir}" "${install_dir}")
 
         # Optional members default to empty when absent.
-        foreach(member toolchain build_type prefix_path module_path user_file program_path execution_path)
+        foreach(member toolchain build_type prefix_path module_path user_file program_path execution_path archive_cache_dir)
             string(JSON ${member} ERROR_VARIABLE e_member GET "${ctx_json}" "${member}")
             if(e_member)
                 set(${member} "")
@@ -167,7 +167,7 @@ function(cdpm_bs_openssl_build ctx_json)
         file(MAKE_DIRECTORY "${ep_root}")
 
         # ---- Download method (git / url / local) ----------------------------------
-        _cdpm_bs_download_lines("${source}" download_lines)
+        _cdpm_bs_download_lines("${source}" download_lines "${archive_cache_dir}")
 
         # ---- Patch step -----------------------------------------------------------
         _cdpm_bs_patch_line("${patches}" patch_line)
