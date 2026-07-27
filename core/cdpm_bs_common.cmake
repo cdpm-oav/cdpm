@@ -59,6 +59,24 @@ function(_cdpm_bs_quote_external_project_value str out)
 endfunction()
 
 # .. rst:
+# ``_cdpm_bs_quote_command_block(<items> <out_var>)``
+#
+# Serializes a CMake list of command tokens into a space-separated block of quoted arguments for the
+# generated mini-project.
+function(_cdpm_bs_quote_command_block items out)
+    set(${out} "")
+    foreach(item IN LISTS items)
+        _cdpm_bs_quote_argument("${item}" quoted)
+        if(${out} STREQUAL "")
+            set(${out} "${quoted}")
+        else()
+            set(${out} "${${out}} ${quoted}")
+        endif()
+    endforeach()
+    return(PROPAGATE ${out})
+endfunction()
+
+# .. rst:
 # ``_cdpm_bs_download_lines(<source_json> <out_var>)``
 #
 # Generates an ExternalProject download block for a source object of type ``git``, ``url``, or

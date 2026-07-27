@@ -169,25 +169,6 @@ function(_cdpm_autotools_configure_args ctx_json out_args)
 endfunction()
 
 # .. rst:
-# ``_cdpm_autotools_quote_command_block(<tokens> <out_block>)``
-#
-# Serializes a CMake list of command tokens into a space-separated block of quoted arguments for the
-# generated mini-project.
-function(_cdpm_autotools_quote_command_block tokens out_block)
-    set(block "")
-    foreach(token IN LISTS tokens)
-        _cdpm_bs_quote_argument("${token}" token_q)
-        if(block STREQUAL "")
-            set(block "${token_q}")
-        else()
-            string(APPEND block " ${token_q}")
-        endif()
-    endforeach()
-    set(${out_block} "${block}")
-    return(PROPAGATE ${out_block})
-endfunction()
-
-# .. rst:
 # ``cdpm_bs_autotools_build(<ctx_json>)``
 #
 # Builds and installs a GNU Autotools package in isolation via ``ExternalProject``. A standalone
@@ -305,9 +286,9 @@ function(cdpm_bs_autotools_build ctx_json)
         endif()
         list(APPEND configure_cmd ${configure_args})
 
-        _cdpm_autotools_quote_command_block("${configure_cmd}" configure_block)
-        _cdpm_autotools_quote_command_block("${build_cmd}" build_block)
-        _cdpm_autotools_quote_command_block("${install_cmd}" install_block)
+        _cdpm_bs_quote_command_block("${configure_cmd}" configure_block)
+        _cdpm_bs_quote_command_block("${build_cmd}" build_block)
+        _cdpm_bs_quote_command_block("${install_cmd}" install_block)
 
         # ---- Assemble the mini-project --------------------------------------------
         _cdpm_bs_miniproject_header("autotools_build" ml)

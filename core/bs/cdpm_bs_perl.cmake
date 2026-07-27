@@ -4,13 +4,8 @@ include_guard(GLOBAL)
 
 cmake_policy(SET CMP0140 NEW)
 
-function(_cdpm_perl_quote str out)
-    string(REPLACE "\\" "\\\\" escaped "${str}")
-    string(REPLACE "\"" "\\\"" escaped "${escaped}")
-    string(REPLACE ";" "\\;" escaped "${escaped}")
-    set(${out} "\"${escaped}\"")
-    return(PROPAGATE ${out})
-endfunction()
+# Shared driver utilities (download/patch/quote helpers).
+include(cdpm_bs_common)
 
 # Builds Perl from its own POSIX ``Configure`` script; no pre-existing Perl interpreter is used.
 function(cdpm_bs_perl_build ctx_json)
@@ -30,19 +25,7 @@ function(cdpm_bs_perl_build ctx_json)
     string(JSON source_type GET "${source}" type)
     _cdpm_invalidate_ep_stamps("${build_dir}" "${install_dir}")
 
-    if(source_type STREQUAL "url")
-        string(JSON url GET "${source}" url)
-        string(JSON sha GET "${source}" sha256)
-        _cdpm_perl_quote("${url}" url_q)
-        set(download "    URL ${url_q}\n    URL_HASH SHA256=${sha}")
-    elseif(source_type STREQUAL "local")
-        string(JSON path GET "${source}" path)
-        _cdpm_perl_quote("${path}" path_q)
-        set(download "    SOURCE_DIR ${path_q}\n    DOWNLOAD_COMMAND \"\"")
-    else()
-        _cdpm_cleanup_driver_user_file("${ctx_json}")
-        message(FATAL_ERROR "[cdpm] perl driver: only url and local sources are supported.")
-    endif()
+    _cdpm_bs_download_lines("${source}" download)
 
     find_program(make_exe NAMES gmake make)
     if(NOT make_exe)
@@ -59,12 +42,12 @@ function(cdpm_bs_perl_build ctx_json)
     # config.h and break the build when the prefix contains '/'
     # (see SITEARCH_EXP / SITELIB_EXP).
     string(REPLACE "'" "\\'" install_dir_escaped "${install_dir}")
-    _cdpm_perl_quote("${make_exe}" make_q)
+    _cdpm_bs_quote_argument("${make_exe}" make_q)
 
     set(ep_root "${build_dir}/_cdpm_ep")
     set(ep_bin "${ep_root}/_build")
     file(MAKE_DIRECTORY "${ep_root}")
-    set(project "cmake_minimum_required(VERSION 3.25)\nproject(perl_build NONE)\ninclude(ExternalProject)\n")
+    _cdpm_bs_miniproject_header("perl_build" project)
     string(APPEND project "ExternalProject_Add(cdpm_pkg\n${download}\n    BUILD_IN_SOURCE TRUE\n")
     string(APPEND project "    CONFIGURE_COMMAND <SOURCE_DIR>/Configure -des -Dprefix='${install_dir_escaped}'\n")
     string(APPEND project "    BUILD_COMMAND ${make_q} -j${nproc}\n")
