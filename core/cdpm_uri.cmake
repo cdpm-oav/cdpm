@@ -80,7 +80,10 @@ function(cdpm_register_uri_shortcut scheme uri_template)
         ${forward} BUILTINS ${__cdpm_uri_builtin_scheme_names})
 endfunction()
 
-# Guesses resource type from a plain URL. (TODO: maybe this is a bad idea)
+# Heuristic resource-type detection from a http/https URL.
+# Used only as a consistency cross-check against the declared source.type
+# in _cdpm_validate_repo_source (cdpm_config.cmake); mismatches are fatal.
+# Returns UNKNOWN when the URL does not match known archive or git patterns.
 # Sets <out_name> in the caller's scope via PROPAGATE.
 macro(_cdpm_guess_resource_type uri out_name)
     block(SCOPE_FOR VARIABLES PROPAGATE "${out_name}")
