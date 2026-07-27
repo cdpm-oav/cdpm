@@ -187,7 +187,7 @@ add_unit_tests(MODULE cdpm_lockfile
 add_unit_tests(MODULE cdpm_cps
     PASS
         generate.interface_basic
-        generate.archive_location
+        generate.static_location
         generate.compat_requires_platform
         generate.disabled_noop
 )

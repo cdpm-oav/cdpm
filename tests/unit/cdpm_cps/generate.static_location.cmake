@@ -1,12 +1,12 @@
-# Test: generate.archive_location
-# An archive component gets a discovered, relocatable @prefix@-relative location for the
+# Test: generate.static_location
+# A static component gets a discovered, relocatable @prefix@-relative location for the
 # installed static library, alongside include dirs.
 include(cdpm_cps)
 include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 set(CDPM_GENERATE_CPS ON)
 
-set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/archive_location")
+set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/static_location")
 file(REMOVE_RECURSE "${tmp}")
 set(install_dir "${tmp}/store/foo/hash01")
 file(MAKE_DIRECTORY "${install_dir}/include")
@@ -14,14 +14,14 @@ file(MAKE_DIRECTORY "${install_dir}/lib")
 file(TOUCH "${install_dir}/include/foo.hpp")
 file(TOUCH "${install_dir}/lib/libfoo.a")
 
-# A second declared archive with no installed library must be skipped, and pruned from
+# A second declared static component with no installed library must be skipped, and pruned from
 # default_components so the .cps never references a component that is not emitted.
 set(meta [[{
     "versions": { "2.1.0": {} },
     "default_components": ["foo", "ghost"],
     "components": {
-        "foo": { "type": "archive" },
-        "ghost": { "type": "archive" }
+        "foo": { "type": "static" },
+        "ghost": { "type": "static" }
     }
 }]])
 
@@ -34,7 +34,7 @@ endif()
 
 file(READ "${cps_file}" cps)
 string(JSON ctype GET "${cps}" "components" "foo" "type")
-assert_eq("${ctype}" "archive" "components.foo.type")
+assert_eq("${ctype}" "static" "components.foo.type")
 
 string(JSON loc GET "${cps}" "components" "foo" "location")
 assert_eq("${loc}" "@prefix@/lib/libfoo.a" "components.foo.location")
@@ -42,11 +42,11 @@ assert_eq("${loc}" "@prefix@/lib/libfoo.a" "components.foo.location")
 string(JSON incl GET "${cps}" "components" "foo" "includes")
 assert_json_eq("${incl}" "[\"@prefix@/include\"]" "components.foo.includes")
 
-# A C++ CABI archive must tell consumers to link the C++ runtime.
+# A C++ CABI static library must tell consumers to link the C++ runtime.
 string(JSON ll GET "${cps}" "components" "foo" "link_languages")
 assert_json_eq("${ll}" "[\"cpp\"]" "components.foo.link_languages")
 
-# The library-less 'ghost' archive must not be emitted...
+# The library-less 'ghost' static component must not be emitted...
 string(JSON ghost ERROR_VARIABLE e_ghost GET "${cps}" "components" "ghost")
 assert_true("${e_ghost}" "ghost component (no library) is skipped")
 
@@ -55,4 +55,4 @@ string(JSON defc GET "${cps}" "default_components")
 assert_json_eq("${defc}" "[\"foo\"]" "default_components pruned to emitted components")
 
 file(REMOVE_RECURSE "${tmp}")
-message(STATUS "PASS: archive gets location + link_languages; unlocatable component is skipped and pruned")
+message(STATUS "PASS: static gets location + link_languages; unlocatable component is skipped and pruned")

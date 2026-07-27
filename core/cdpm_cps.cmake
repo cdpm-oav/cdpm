@@ -66,8 +66,8 @@ endfunction()
 #   (each only when non-empty);
 # * ``default_components`` (pruned to components actually emitted) and ``requires`` (from
 #   ``meta.dependencies``, per-version override wins);
-# * ``components``: ``interface`` components carry ``includes`` only; ``archive`` / ``dylib`` components also
-#   get a discovered ``location`` (and ``link_languages: ["cpp"]`` for ``archive``, so a consumer links the
+# * ``components``: ``interface`` components carry ``includes`` only; ``static`` / ``shared`` components also
+#   get a discovered ``location`` (and ``link_languages: ["cpp"]`` for ``static``, so a consumer links the
 #   C++ runtime). A compiled component whose library cannot be located is skipped with a warning (an invalid
 #   location-less non-interface component is worse than an absent one).
 function(_cdpm_cps_compose name version install_dir meta_json out_json)
@@ -158,7 +158,7 @@ function(_cdpm_cps_compose name version install_dir meta_json out_json)
         endif()
 
         set(location "")
-        if(ctype MATCHES [[(archive|dylib|module|executable)]])
+        if(ctype MATCHES [[(static|shared|module|executable)]])
             _cdpm_cps_find_library("${install_dir}" "${comp}" location)
             if(location STREQUAL "")
                 message(WARNING "[cdpm] cps: component '${comp}' (type '${ctype}') of '${name}' has no "
@@ -175,7 +175,7 @@ function(_cdpm_cps_compose name version install_dir meta_json out_json)
         endif()
         # A CABI static library built from C++ requires the consumer to also link the C++ runtime; declare
         # it so consumers of any language get correct link behaviour (CPS default is ["c"]).
-        if(ctype STREQUAL "archive")
+        if(ctype STREQUAL "static")
             string(JSON cobj SET "${cobj}" "link_languages" "[\"cpp\"]")
         endif()
         if(has_include)
