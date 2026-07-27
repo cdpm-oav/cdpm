@@ -156,9 +156,15 @@ add_unit_tests(MODULE cdpm_build
         build.driver_validation_user_cleanup
         build.sentinel_skip
         build.autotools_configure_args
+        build.b2_address_model
+        build.b2_args_translation
+        build.b2_toolset_mapping
+        build.b2_user_config_jam
+        build.b2_variant_mapping
         build.host_context
         build.archive_cache_dir
     FAIL
+        build.b2_toolset_unknown
         build.unimplemented_driver
 )
 
