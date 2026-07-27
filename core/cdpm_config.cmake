@@ -1940,6 +1940,42 @@ function(cdpm_get_package_options pkg_name pkg_version out_options_json)
 endfunction()
 
 # .. rst:
+# ``cdpm_get_package_build_system_override(<pkg_name> <out_value> <out_found>)``
+#
+# Reads ``packages.<pkg_name>.build_system`` from the merged user config (``cdpm.json`` layers, NOT the
+# package manifest). Returns the lower-cased driver name if set, or sets ``<out_found>`` to FALSE when the
+# field is absent or empty. The override is validated against the driver registry via
+# :cmake:command:`cdpm_get_build_system`; an unregistered driver raises ``FATAL_ERROR``.
+function(cdpm_get_package_build_system_override pkg_name out_value out_found)
+    string(TOLOWER "${pkg_name}" name)
+
+    set(${out_value} "")
+    set(${out_found} FALSE)
+
+    get_property(eff GLOBAL PROPERTY CDPM_EFFECTIVE_CONFIG)
+    if(NOT eff)
+        return(PROPAGATE ${out_value} ${out_found})
+    endif()
+
+    string(JSON bs_override ERROR_VARIABLE bs_err GET "${eff}" "packages" "${name}" "build_system")
+    if(bs_err OR bs_override STREQUAL "")
+        return(PROPAGATE ${out_value} ${out_found})
+    endif()
+
+    string(TOLOWER "${bs_override}" bs_override)
+
+    cdpm_get_build_system("${bs_override}" _ bs_registered)
+    if(NOT bs_registered)
+        message(FATAL_ERROR "[cdpm] package '${name}': build_system override '${bs_override}' is not a "
+            "registered driver.")
+    endif()
+
+    set(${out_value} "${bs_override}")
+    set(${out_found} TRUE)
+    return(PROPAGATE ${out_value} ${out_found})
+endfunction()
+
+# .. rst:
 # ``cdpm_get_package_user_kv(<pkg_name> <out_tracked_json> <out_untracked_json>)``
 #
 # Computes the effective user key-value maps for ``<pkg_name>``. The single ``user`` section
@@ -2065,10 +2101,13 @@ function(cdpm_get_package_source pkg_name meta_json version out_source_json out_
                 _cdpm_json_set_safe("${src}" "rev" "${rev}" "STRING" src)
             endif()
         elseif(src_type STREQUAL "url")
-            # Package-level url_template expands {version} into a concrete URL.
+            # Package-level url_template expands {version} and {version_underscored} into a concrete URL.
             string(JSON url_template ERROR_VARIABLE tmpl_err GET "${meta_json}" "source" "url_template")
             if(NOT tmpl_err AND NOT url_template STREQUAL "")
-                string(REPLACE "{version}" "${version}" expanded_url "${url_template}")
+                string(REPLACE "." "_" version_underscored "${version}")
+                set(expanded_url "${url_template}")
+                string(REPLACE "{version_underscored}" "${version_underscored}" expanded_url "${expanded_url}")
+                string(REPLACE "{version}" "${version}" expanded_url "${expanded_url}")
                 _cdpm_json_set_safe("${src}" "url" "${expanded_url}" "STRING" src)
             endif()
 

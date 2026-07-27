@@ -212,6 +212,7 @@ add_unit_tests(MODULE cdpm_config
         config_blame.cli_command
         config_blame.layer_origins
         config_load.layer_merge
+        config.build_system_override
         generate_user_file.basic
         get_package_options.layers
         get_package_system_dependencies.replacement
@@ -224,6 +225,7 @@ add_unit_tests(MODULE cdpm_config
         load_repos.file_and_masks
         resolve_version.cache_override_skips_lockfile
         resolve_version.no_lockfile_flag_skips_lockfile
+        url_template.version_underscored
         load_repos.force_resets_registry
         load_repos.git_local_baseline
         merge_json.deep
@@ -232,6 +234,7 @@ add_unit_tests(MODULE cdpm_config
     FAIL
         build_system.duplicate_no_override
         config_load.security.user_integrity
+        config.build_system_override.unregistered
         generate_user_file.invalid_key
         get_package_source.override_without_flag
         get_package_source.override_wrong_type

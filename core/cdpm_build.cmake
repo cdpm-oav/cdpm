@@ -257,6 +257,13 @@ function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
         string(TOLOWER "${bs_decl}" bs)
     endif()
 
+    # Apply a user-config override (packages.<pkg>.build_system) if present. This is
+    # intentionally read only from the merged user config, never from the manifest.
+    cdpm_get_package_build_system_override("${name}" bs_override bs_override_found)
+    if(bs_override_found AND NOT bs_override STREQUAL "")
+        set(bs "${bs_override}")
+    endif()
+
     cdpm_get_build_system("${bs}" bs_module bs_found)
     if(NOT bs_found)
         message(FATAL_ERROR "[cdpm] package '${name}': unknown build_system '${bs}'.")
