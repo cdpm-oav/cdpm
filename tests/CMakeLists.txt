@@ -130,6 +130,7 @@ add_unit_tests(MODULE cdpm_hash
         compute.dependency_identities
         compute.manifest_patch
         compute.host_profile
+        hash.build_system_override
 )
 
 add_unit_tests(MODULE cdpm_toolchain

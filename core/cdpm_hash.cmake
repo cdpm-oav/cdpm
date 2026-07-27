@@ -223,6 +223,16 @@ function(cdpm_compute_config_hash pkg_name pkg_version meta_json out_hash)
         string(APPEND parts "|opts:${opts_json}")
     endif()
 
+    # ---- Build-system override --------------------------------------------------
+    # A user-configured packages.<pkg>.build_system override changes the driver that
+    # runs the build, so it must move the binary identity.
+    if(COMMAND cdpm_get_package_build_system_override)
+        cdpm_get_package_build_system_override("${name}" bs_override bs_override_found)
+        if(bs_override_found AND NOT bs_override STREQUAL "")
+            string(APPEND parts "|bs:${bs_override}")
+        endif()
+    endif()
+
     # ---- Tracked user key-values ------------------------------------------------
     if(COMMAND cdpm_get_package_user_kv)
         cdpm_get_package_user_kv("${name}" tracked_json untracked_json)
