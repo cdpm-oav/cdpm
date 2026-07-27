@@ -1,0 +1,11 @@
+include(cdpm_toolchain)
+include(cdpm_hash)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
+
+set(CMAKE_SYSTEM_NAME iOS)
+set(CMAKE_SYSTEM_PROCESSOR arm64)
+set(CMAKE_OSX_SYSROOT iphonesimulator)
+cdpm_compute_config_hash(tool 1 "{}" target_hash)
+cdpm_compute_config_hash(tool 1 "{}" host_hash HOST)
+assert_ne("${target_hash}" "${host_hash}" "host and target profiles have distinct hashes")
+message(STATUS "PASS: compute.host_profile")

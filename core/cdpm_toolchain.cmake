@@ -76,12 +76,12 @@ function(cdpm_prepare_toolchain config_hash out_toolchain_path)
     cmake_parse_arguments(arg "HOST" "" "" ${ARGN})
 
     set(external "")
-    if(DEFINED CMAKE_TOOLCHAIN_FILE AND NOT CMAKE_TOOLCHAIN_FILE STREQUAL "")
+    if(NOT arg_HOST AND DEFINED CMAKE_TOOLCHAIN_FILE AND NOT CMAKE_TOOLCHAIN_FILE STREQUAL "")
         if(NOT EXISTS "${CMAKE_TOOLCHAIN_FILE}")
             message(FATAL_ERROR "[cdpm] CMAKE_TOOLCHAIN_FILE does not exist: ${CMAKE_TOOLCHAIN_FILE}")
         endif()
         cmake_path(ABSOLUTE_PATH CMAKE_TOOLCHAIN_FILE NORMALIZE OUTPUT_VARIABLE external)
-    elseif(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    elseif(NOT arg_HOST AND CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
         message(FATAL_ERROR
             "[cdpm] Emscripten target requires an external emsdk toolchain; "
             "set CMAKE_TOOLCHAIN_FILE to emscripten/cmake/Modules/Platform/Emscripten.cmake."
@@ -112,7 +112,11 @@ function(cdpm_prepare_toolchain config_hash out_toolchain_path)
     endif()
 
     # Freeze the injected/effective values on top (IDE -D variables win, as the parent used them).
-    _cdpm_toolchain_var_list(freeze_vars)
+    if(arg_HOST)
+        set(freeze_vars "")
+    else()
+        _cdpm_toolchain_var_list(freeze_vars)
+    endif()
     foreach(var IN LISTS freeze_vars)
         if(DEFINED ${var} AND NOT "${${var}}" STREQUAL "")
             list(APPEND lines "set(${var} \"${${var}}\" CACHE STRING \"\" FORCE)")

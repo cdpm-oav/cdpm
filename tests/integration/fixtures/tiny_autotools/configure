@@ -1,0 +1,40 @@
+#!/bin/sh
+# Minimal mock autotools configure script for cdpm testing.
+# Accepts --prefix=<path> and other standard autotools flags, writes config.h,
+# and generates Makefile from Makefile.in by substituting @prefix@.
+
+prefix=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --prefix=*)
+            prefix="${1#--prefix=}"
+            ;;
+        --enable-*|--disable-*|--with-*|--without-*|--host=*)
+            # Silently accepted for compatibility
+            ;;
+        *)
+            ;;
+    esac
+    shift
+done
+
+if [ -z "$prefix" ]; then
+    echo "configure: error: --prefix is required"
+    exit 1
+fi
+
+# Write config.h
+cat > config.h <<EOF
+#ifndef TINY_AUTOTOOLS_CONFIG_H
+#define TINY_AUTOTOOLS_CONFIG_H
+#define TINY_AUTOTOOLS 1
+#define PREFIX "${prefix}"
+#endif
+EOF
+
+# Generate Makefile from Makefile.in
+sed "s|@prefix@|${prefix}|g" Makefile.in > Makefile
+
+echo "configure: done (mock autotools) -- prefix=${prefix}"
+exit 0

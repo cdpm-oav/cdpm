@@ -61,7 +61,7 @@ endfunction()
 # .. rst:
 # ``_cdpm_openssl_configure_target(<ctx_json> <out_target>)``
 #
-# Selects the OpenSSL Configure target for the current host platform from
+# Selects the OpenSSL Configure target for the target platform from
 # ``ctx_json.build.configure_target_map``.
 function(_cdpm_openssl_configure_target ctx_json out_target)
     string(JSON target_map ERROR_VARIABLE err GET "${ctx_json}" "build" "configure_target_map")
@@ -70,8 +70,19 @@ function(_cdpm_openssl_configure_target ctx_json out_target)
         return(PROPAGATE ${out_target})
     endif()
 
-    _cdpm_get_host_processor(host_proc)
-    set(platform_key "${CMAKE_HOST_SYSTEM_NAME}-${host_proc}")
+    set(system_name "${CMAKE_SYSTEM_NAME}")
+    set(processor "${CMAKE_SYSTEM_PROCESSOR}")
+    if(system_name STREQUAL "")
+        set(system_name "${CMAKE_HOST_SYSTEM_NAME}")
+    endif()
+    if(processor STREQUAL "")
+        _cdpm_get_host_processor(processor)
+    endif()
+    if(system_name STREQUAL "iOS" AND CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
+        set(platform_key "iOSSimulator-${processor}")
+    else()
+        set(platform_key "${system_name}-${processor}")
+    endif()
     string(JSON target ERROR_VARIABLE target_err GET "${target_map}" "${platform_key}")
     if(target_err)
         set(${out_target} "")
@@ -152,7 +163,7 @@ function(cdpm_bs_openssl_build ctx_json)
         _cdpm_invalidate_ep_stamps("${build_dir}" "${install_dir}")
 
         # Optional members default to empty when absent.
-        foreach(member toolchain build_type prefix_path module_path user_file)
+        foreach(member toolchain build_type prefix_path module_path user_file program_path execution_path)
             string(JSON ${member} ERROR_VARIABLE e_member GET "${ctx_json}" "${member}")
             if(e_member)
                 set(${member} "")
@@ -164,22 +175,20 @@ function(cdpm_bs_openssl_build ctx_json)
             set(patches "[]")
         endif()
 
-        # ---- Perl -----------------------------------------------------------------
-        find_program(perl_exe NAMES perl)
+        # ---- Managed Perl ---------------------------------------------------------
+        find_program(perl_exe NAMES perl PATHS ${program_path} NO_DEFAULT_PATH)
         if(NOT perl_exe)
             _cdpm_cleanup_driver_user_file("${ctx_json}")
-            message(FATAL_ERROR "[cdpm] openssl: Perl is required (5.10+). "
-                "Install Perl or set PERL_EXECUTABLE.")
+            message(FATAL_ERROR "[cdpm] openssl: managed host dependency Perl was not found in host_prefixes; "
+                "system Perl fallback is intentionally disabled.")
         endif()
 
         # ---- Configure target -----------------------------------------------------
         _cdpm_openssl_configure_target("${ctx_json}" target)
         if(target STREQUAL "")
             _cdpm_cleanup_driver_user_file("${ctx_json}")
-            _cdpm_get_host_processor(host_proc)
-            set(platform_key "${CMAKE_HOST_SYSTEM_NAME}-${host_proc}")
             message(FATAL_ERROR "[cdpm] openssl: no configure target for platform "
-                "'${platform_key}'. "
+                "'${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}'. "
                 "Add it to configure_target_map in the package registry.")
         endif()
 
@@ -194,12 +203,11 @@ function(cdpm_bs_openssl_build ctx_json)
         endif()
 
         if(CMAKE_HOST_WIN32)
-            set(build_cmd "nmake")
-            set(install_cmd "nmake" "install_sw")
-        else()
-            set(build_cmd "make" "-j${nproc}")
-            set(install_cmd "make" "install_sw")
+            _cdpm_cleanup_driver_user_file("${ctx_json}")
+            message(FATAL_ERROR "[cdpm] openssl: managed Perl/OpenSSL builds are unsupported on Windows.")
         endif()
+        set(build_cmd "make" "-j${nproc}")
+        set(install_cmd "make" "install_sw")
 
         # ---- Mini-project layout --------------------------------------------------
         set(ep_root "${build_dir}/_cdpm_ep")
@@ -314,7 +322,30 @@ function(cdpm_bs_openssl_build ctx_json)
             string(APPEND ml "\n${patch_line}")
         endif()
         string(APPEND ml "\n    BUILD_IN_SOURCE TRUE")
-        string(APPEND ml "\n    CONFIGURE_COMMAND ${perl_q} ${configure_q} ${target_q} ${prefix_q} ${openssldir_q}")
+        set(configure_env "${CMAKE_COMMAND}" -E env)
+        foreach(tool IN ITEMS CC CXX AR RANLIB)
+            if(tool STREQUAL "CC")
+                set(tool_value "${CMAKE_C_COMPILER}")
+            elseif(tool STREQUAL "CXX")
+                set(tool_value "${CMAKE_CXX_COMPILER}")
+            elseif(tool STREQUAL "AR")
+                set(tool_value "${CMAKE_C_COMPILER_AR}")
+            else()
+                set(tool_value "${CMAKE_C_COMPILER_RANLIB}")
+            endif()
+            if(NOT tool_value STREQUAL "")
+                list(APPEND configure_env "${tool}=${tool_value}")
+            endif()
+        endforeach()
+        if(NOT CMAKE_OSX_SYSROOT STREQUAL "")
+            list(APPEND configure_env "SDKROOT=${CMAKE_OSX_SYSROOT}")
+        endif()
+        set(configure_env_block "")
+        foreach(token IN LISTS configure_env)
+            _cdpm_openssl_quote_argument("${token}" token_q)
+            string(APPEND configure_env_block " ${token_q}")
+        endforeach()
+        string(APPEND ml "\n    CONFIGURE_COMMAND${configure_env_block} ${perl_q} ${configure_q} ${target_q} ${prefix_q} ${openssldir_q}")
         string(APPEND ml " ${configure_args_block}")
         string(APPEND ml "\n    BUILD_COMMAND ${build_cmd_block}")
         string(APPEND ml "\n    INSTALL_COMMAND ${install_cmd_block}")

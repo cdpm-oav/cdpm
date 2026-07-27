@@ -175,6 +175,11 @@ endfunction()
 # optional CPS generation hook -> write the sentinel. Only the ``cmake`` driver is implemented in v1; any
 # other declared driver aborts with a clear "not yet implemented" error from the driver stub.
 function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
+    cmake_parse_arguments(arg "" "PROFILE" "HOST_PREFIXES" ${ARGN})
+    if(NOT DEFINED arg_PROFILE OR arg_PROFILE STREQUAL "")
+        set(arg_PROFILE TARGET)
+    endif()
+    string(TOUPPER "${arg_PROFILE}" arg_PROFILE)
     string(TOLOWER "${pkg_name}" name)
 
     _cdpm_resolve_store_dir(store)
@@ -197,7 +202,11 @@ function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
     cdpm_collect_patches("${name}" "${pkg_version}" "${meta_json}" patches_json)
 
     # ---- Toolchain --------------------------------------------------------------
-    cdpm_prepare_toolchain("${config_hash}" toolchain)
+    if(arg_PROFILE STREQUAL "HOST")
+        cdpm_prepare_toolchain("${config_hash}" toolchain HOST)
+    else()
+        cdpm_prepare_toolchain("${config_hash}" toolchain)
+    endif()
 
     # ---- Effective options ------------------------------------------------------
     set(options "{}")
@@ -248,6 +257,7 @@ function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
 
     # ---- Assemble the driver context -------------------------------------------
     set(ctx "{}")
+    _cdpm_json_set_safe("${ctx}" "profile"      "${arg_PROFILE}"        "STRING" ctx)
     _cdpm_json_set_safe("${ctx}" "build_dir"    "${build_dir}"          "STRING" ctx)
     _cdpm_json_set_safe("${ctx}" "install_dir"  "${install_dir}"        "STRING" ctx)
     string(JSON ctx SET "${ctx}" "source"       "${source_json}")
@@ -258,6 +268,19 @@ function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
     _cdpm_json_set_safe("${ctx}" "generator"    "${CMAKE_GENERATOR}"    "STRING" ctx)
     _cdpm_json_set_safe("${ctx}" "prefix_path"  "${CMAKE_PREFIX_PATH}"  "STRING" ctx)
     _cdpm_json_set_safe("${ctx}" "module_path"  "${CMAKE_MODULE_PATH}"  "STRING" ctx)
+    _cdpm_json_set_safe("${ctx}" "host_prefixes" "${arg_HOST_PREFIXES}" "STRING" ctx)
+    set(program_path "")
+    foreach(host_prefix IN LISTS arg_HOST_PREFIXES)
+        list(APPEND program_path "${host_prefix}/bin")
+    endforeach()
+    _cdpm_json_set_safe("${ctx}" "program_path" "${program_path}" "STRING" ctx)
+    set(execution_entries ${program_path})
+    if(DEFINED ENV{PATH} AND NOT "$ENV{PATH}" STREQUAL "")
+        cmake_path(CONVERT "$ENV{PATH}" TO_CMAKE_PATH_LIST inherited_path NORMALIZE)
+        list(APPEND execution_entries ${inherited_path})
+    endif()
+    cmake_path(CONVERT "${execution_entries}" TO_NATIVE_PATH_LIST execution_path NORMALIZE)
+    _cdpm_json_set_safe("${ctx}" "execution_path" "${execution_path}" "STRING" ctx)
     _cdpm_json_set_safe("${ctx}" "user_file"    "${user_file}"          "STRING" ctx)
 
     string(JSON __build_obj ERROR_VARIABLE __build_err GET "${meta_json}" "build")

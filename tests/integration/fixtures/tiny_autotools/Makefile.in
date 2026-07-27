@@ -1,0 +1,15 @@
+# Makefile.in — template for tiny_autotools fixture.
+# @prefix@ is substituted by the configure script.
+
+prefix = @prefix@
+
+all:
+	@echo "Building tiny_autotools (mock)..."
+
+install:
+	mkdir -p $(prefix)/include $(prefix)/lib
+	echo "/* Autotools test fixture */" > $(prefix)/include/tiny.h
+	echo "#define TINY_AUTOTOOLS 1" >> $(prefix)/include/tiny.h
+	touch $(prefix)/lib/libtiny.a
+
+.PHONY: all install

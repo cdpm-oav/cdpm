@@ -614,7 +614,7 @@ endfunction()
 # Built-in driver names. Overriding one of these triggers a stronger
 # trust warning via the _cdpm_kv_registry_* BUILTINS contract.
 set(__cdpm_build_system_builtin_names
-    cmake autotools make b2 openssl custom gn
+    cmake autotools make b2 openssl perl custom gn
     CACHE INTERNAL "cdpm built-in build-system driver names" FORCE
 )
 
@@ -1055,6 +1055,63 @@ function(_cdpm_normalize_managed_dependencies pkg_name json context out_json)
     return(PROPAGATE ${out_json})
 endfunction()
 
+# Normalizes build-time host dependencies. Host edges intentionally support only an exact, non-empty
+# ``version`` request: components belong to target package consumption and are not meaningful for tools.
+function(_cdpm_normalize_host_dependencies pkg_name json context out_json)
+    cmake_policy(SET CMP0054 NEW)
+    string(JSON map_type ERROR_VARIABLE map_err TYPE "${json}")
+    if(map_err OR NOT map_type STREQUAL "OBJECT")
+        message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context} must be an object map.")
+    endif()
+    set(result "{}")
+    _cdpm_json_foreach("${json}" dependency_names)
+    foreach(dependency_name IN LISTS dependency_names)
+        if(dependency_name STREQUAL "" OR NOT dependency_name MATCHES [[^[A-Za-z0-9_.+-]+$]])
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context} contains unsafe package name "
+                "'${dependency_name}'.")
+        endif()
+        string(JSON spec_type TYPE "${json}" "${dependency_name}")
+        if(NOT spec_type STREQUAL "OBJECT")
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name} must be an object.")
+        endif()
+        string(JSON spec GET "${json}" "${dependency_name}")
+        _cdpm_json_foreach("${spec}" fields)
+        foreach(field IN LISTS fields)
+            if(NOT field STREQUAL "version")
+                message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name} has unknown "
+                    "field '${field}'; host dependencies allow only 'version'.")
+            endif()
+        endforeach()
+        string(JSON version ERROR_VARIABLE version_err GET "${spec}" version)
+        string(JSON version_type ERROR_VARIABLE version_type_err TYPE "${spec}" version)
+        if(version_err OR version_type_err OR NOT version_type STREQUAL "STRING" OR version STREQUAL "")
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name}.version must be "
+                "a non-empty string.")
+        endif()
+        set(normalized "{}")
+        _cdpm_json_set_safe("${normalized}" version "${version}" STRING normalized)
+        string(JSON result SET "${result}" "${dependency_name}" "${normalized}")
+    endforeach()
+    cdpm_canonical_json("${result}" result)
+    set(${out_json} "${result}")
+    return(PROPAGATE ${out_json})
+endfunction()
+
+function(_cdpm_assert_managed_dependency_sets_disjoint pkg_name target_json host_json context)
+    _cdpm_json_foreach("${target_json}" target_names)
+    _cdpm_json_foreach("${host_json}" host_names)
+    foreach(target_name IN LISTS target_names)
+        string(TOLOWER "${target_name}" target_key)
+        foreach(host_name IN LISTS host_names)
+            string(TOLOWER "${host_name}" host_key)
+            if(target_key STREQUAL host_key)
+                message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': dependency '${target_name}' appears in "
+                    "both dependencies and host_dependencies (${context}).")
+            endif()
+        endforeach()
+    endforeach()
+endfunction()
+
 # .. rst:
 # ``_cdpm_assert_dependency_sets_disjoint(<pkg> <managed_json> <system_json> <context>)``
 function(_cdpm_assert_dependency_sets_disjoint pkg_name managed_json system_json context)
@@ -1122,6 +1179,14 @@ function(_cdpm_validate_repo_managed_dependencies pkg_name pkg_json)
         _cdpm_normalize_managed_dependencies("${pkg_name}" "${package_dependencies}" dependencies
             package_dependencies)
     endif()
+    string(JSON package_host ERROR_VARIABLE package_host_err GET "${pkg_json}" host_dependencies)
+    if(package_host_err)
+        set(package_host "{}")
+    else()
+        _cdpm_normalize_host_dependencies("${pkg_name}" "${package_host}" host_dependencies package_host)
+    endif()
+    _cdpm_assert_managed_dependency_sets_disjoint("${pkg_name}" "${package_dependencies}" "${package_host}"
+        "package level")
     string(JSON versions ERROR_VARIABLE versions_err GET "${pkg_json}" versions)
     if(versions_err)
         return()
@@ -1134,6 +1199,20 @@ function(_cdpm_validate_repo_managed_dependencies pkg_name pkg_json)
             _cdpm_normalize_managed_dependencies("${pkg_name}" "${version_dependencies}"
                 "versions.${version}.dependencies" unused)
         endif()
+        if(dependency_err)
+            set(effective_dependencies "${package_dependencies}")
+        else()
+            set(effective_dependencies "${version_dependencies}")
+        endif()
+        string(JSON version_host ERROR_VARIABLE host_err GET "${versions}" "${version}" host_dependencies)
+        if(host_err)
+            set(effective_host "${package_host}")
+        else()
+            _cdpm_normalize_host_dependencies("${pkg_name}" "${version_host}"
+                "versions.${version}.host_dependencies" effective_host)
+        endif()
+        _cdpm_assert_managed_dependency_sets_disjoint("${pkg_name}" "${effective_dependencies}" "${effective_host}"
+            "version '${version}'")
     endforeach()
 endfunction()
 
@@ -1497,6 +1576,24 @@ function(cdpm_get_package_dependencies pkg_name meta_json version out_json)
     return(PROPAGATE ${out_json})
 endfunction()
 
+# Returns the canonical host-tool map. A version-level declaration replaces the package-level map.
+function(cdpm_get_package_host_dependencies pkg_name meta_json version out_json)
+    string(JSON dependencies ERROR_VARIABLE dependencies_err GET "${meta_json}" host_dependencies)
+    if(dependencies_err)
+        set(dependencies "{}")
+    endif()
+    if(NOT version STREQUAL "")
+        string(JSON version_dependencies ERROR_VARIABLE version_err GET
+            "${meta_json}" versions "${version}" host_dependencies)
+        if(NOT version_err)
+            set(dependencies "${version_dependencies}")
+        endif()
+    endif()
+    _cdpm_normalize_host_dependencies("${pkg_name}" "${dependencies}" "effective host_dependencies" result)
+    set(${out_json} "${result}")
+    return(PROPAGATE ${out_json})
+endfunction()
+
 function(cdpm_get_package_find_name pkg_key meta_json out_name)
     string(JSON find_name ERROR_VARIABLE find_name_err GET "${meta_json}" find_package_name)
     if(find_name_err)
@@ -1609,6 +1706,7 @@ endfunction()
 # ``<out_compat_version>`` so the provider can answer ``find_package`` with the correct CPS
 # ``compat_version``.
 function(cdpm_resolve_version pkg_name meta_json requested_version out_version out_compat_version)
+    cmake_parse_arguments(arg "HOST" "" "" ${ARGN})
     string(TOLOWER "${pkg_name}" name)
     string(TOUPPER "${pkg_name}" upper)
 
@@ -1641,7 +1739,12 @@ function(cdpm_resolve_version pkg_name meta_json requested_version out_version o
     if(selected STREQUAL "" AND NOT CDPM_SKIP_LOCKFILE)
         get_property(lock GLOBAL PROPERTY CDPM_LOCKFILE_JSON)
         if(lock)
-            string(JSON lock_ver ERROR_VARIABLE lock_err GET "${lock}" "packages" "${name}" "version")
+            if(arg_HOST)
+                set(lock_section host_packages)
+            else()
+                set(lock_section packages)
+            endif()
+            string(JSON lock_ver ERROR_VARIABLE lock_err GET "${lock}" "${lock_section}" "${name}" "version")
             if(NOT lock_err AND NOT lock_ver STREQUAL "")
                 set(selected "${lock_ver}")
                 set(source "cdpm.lock.json")

@@ -213,7 +213,7 @@ endif()
 
 set(cycle_entry_a [[{"version":"1","config_hash":"a","dependencies":{"b":{"package":"b","version":"1","config_hash":"b"}},"dev":false}]])
 set(cycle_entry_b [[{"version":"1","config_hash":"b","dependencies":{"a":{"package":"a","version":"1","config_hash":"a"}},"dev":false}]])
-set(rootless [[{"lock_schema":1,"packages":{},"repos":[]}]])
+set(rootless [[{"lock_schema":1,"packages":{},"host_packages":{},"repos":[]}]])
 string(JSON rootless SET "${rootless}" packages a "${cycle_entry_a}")
 string(JSON rootless SET "${rootless}" packages b "${cycle_entry_b}")
 set(rootless_path "${tmp}/rootless.lock.json")

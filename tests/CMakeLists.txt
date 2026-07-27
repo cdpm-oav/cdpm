@@ -129,6 +129,7 @@ add_unit_tests(MODULE cdpm_hash
         compute.system_identities
         compute.dependency_identities
         compute.manifest_patch
+        compute.host_profile
 )
 
 add_unit_tests(MODULE cdpm_toolchain
@@ -136,6 +137,7 @@ add_unit_tests(MODULE cdpm_toolchain
         prepare.wrapper_includes_external
         prepare.freezes_allowlist
         prepare.synthesize
+        prepare.host_native
 )
 
 add_unit_tests(MODULE cdpm_context
@@ -152,6 +154,8 @@ add_unit_tests(MODULE cdpm_build
         collect_patches.manifest_relative
         build.driver_validation_user_cleanup
         build.sentinel_skip
+        build.autotools_configure_args
+        build.host_context
     FAIL
         build.unimplemented_driver
 )
@@ -186,12 +190,16 @@ add_integration_tests(
         build_cmake_driver_security
         build_cmake_driver_patch
         build_cmake_driver_cps
+        build_autotools_driver
         build_failure_user_cleanup
         cli_context
+        cross_ios_simulator
+        host_tool_graph
         provider_find_package
         provider_graph
         resolver_lock_modes
     NETWORK
+        openssl_managed_perl_e2e
         provider_fmt_e2e
 )
 
@@ -207,6 +215,8 @@ add_unit_tests(MODULE cdpm_config
         get_package_options.layers
         get_package_system_dependencies.replacement
         get_package_dependencies.replacement
+        get_package_host_dependencies.replacement
+        host_dependencies.validation
         get_package_source.override_local
         get_package_source.repo_default
         get_package_user_kv.tracked_split
@@ -240,6 +250,7 @@ add_unit_tests(MODULE cdpm_config
         load_repo.system_dependencies_unsafe_name
         load_repo.system_dependencies_unknown_field
         load_repo.managed_dependencies_unknown_field
+        load_repo.host_dependencies_invalid
         load_repo.duplicate_find_name
 )
 
@@ -295,10 +306,12 @@ add_unit_tests(MODULE cdpm_system_dependencies
 add_unit_tests(MODULE cdpm_resolve
     PASS
         resolve.shared_graph
+        resolve.host_graph
     FAIL
         resolve.version_conflict
         resolve.cycle
         resolve.duplicate_alias
+        resolve.host_rejects_target_dependency
 )
 set_tests_properties(unit.cdpm_system_dependencies.probe.symlink_identity_path
     PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP: symlink creation unsupported"

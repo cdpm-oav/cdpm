@@ -112,12 +112,15 @@ function(cdpm_bs_cmake_build ctx_json)
     if(e_opts)
         set(options "{}")
     endif()
-    foreach(member toolchain build_type generator prefix_path module_path user_file)
+    foreach(member toolchain build_type generator prefix_path module_path user_file program_path execution_path)
         string(JSON ${member} ERROR_VARIABLE e_member GET "${ctx_json}" "${member}")
         if(e_member)
             set(${member} "")
         endif()
     endforeach()
+    if(execution_path STREQUAL "")
+        set(execution_path "$ENV{PATH}")
+    endif()
 
     string(JSON patches ERROR_VARIABLE e_patches GET "${ctx_json}" "patches")
     if(e_patches)
@@ -212,7 +215,7 @@ function(cdpm_bs_cmake_build ctx_json)
         set(list_separator "__CDPM_LIST_SEPARATOR_${separator_index}__")
         set(separator_found FALSE)
         foreach(value IN ITEMS "${install_dir}" "${build_type}" "${toolchain}" "${prefix_path}"
-                "${module_path}" "${user_file}" "${__inject_file}" "${__CDPM_BUILD_ROOT}")
+                "${module_path}" "${user_file}" "${program_path}" "${__inject_file}" "${__CDPM_BUILD_ROOT}")
             string(FIND "${value}" "${list_separator}" separator_position)
             if(NOT separator_position EQUAL -1)
                 set(separator_found TRUE)
@@ -252,6 +255,12 @@ function(cdpm_bs_cmake_build ctx_json)
     if(NOT prefix_path STREQUAL "")
         _cdpm_cmake_quote_cache_argument(
             "-DCMAKE_PREFIX_PATH:STRING=${prefix_path}" "${list_separator}" cache_arg
+        )
+        string(APPEND cache_args_block "\n        ${cache_arg}")
+    endif()
+    if(NOT program_path STREQUAL "")
+        _cdpm_cmake_quote_cache_argument(
+            "-DCMAKE_PROGRAM_PATH:STRING=${program_path}" "${list_separator}" cache_arg
         )
         string(APPEND cache_args_block "\n        ${cache_arg}")
     endif()
@@ -342,8 +351,9 @@ function(cdpm_bs_cmake_build ctx_json)
     endif()
 
     message(STATUS "[cdpm] cmake/EP: configuring isolated build for ${src_type} source")
+    set(configure_process "${CMAKE_COMMAND}" -E env "PATH=${execution_path}" ${configure_cmd})
     execute_process(
-        COMMAND ${configure_cmd}
+        COMMAND ${configure_process}
         RESULT_VARIABLE rc
     )
     if(NOT rc EQUAL 0)
@@ -354,7 +364,8 @@ function(cdpm_bs_cmake_build ctx_json)
     # ---- Drive the ExternalProject (download -> patch -> configure -> build -> install) ----
     message(STATUS "[cdpm] cmake/EP: building -> ${install_dir}")
     execute_process(
-        COMMAND "${CMAKE_COMMAND}" --build "${ep_bin}"
+        COMMAND "${CMAKE_COMMAND}" -E env "PATH=${execution_path}"
+            "${CMAKE_COMMAND}" --build "${ep_bin}"
         RESULT_VARIABLE rc
     )
     if(NOT rc EQUAL 0)

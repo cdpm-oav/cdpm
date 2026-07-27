@@ -1,0 +1,42 @@
+cmake_policy(SET CMP0011 NEW)
+include(cdpm_resolve)
+include("${CDPM_TEST_HELPERS}/helpers.cmake")
+
+set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/host-graph")
+file(REMOVE_RECURSE "${tmp}")
+file(MAKE_DIRECTORY "${tmp}")
+set(CDPM_PROJECT_DIR "${tmp}")
+set(CDPM_STORE_DIR "${tmp}/store")
+set(CDPM_RUNTIME_DIR "${tmp}/runtime")
+set_property(GLOBAL PROPERTY CDPM_CONFIG_LOADED TRUE)
+set_property(GLOBAL PROPERTY CDPM_EFFECTIVE_CONFIG [[{"packages":{},"options":{},"user":{}}]])
+set_property(GLOBAL PROPERTY CDPM_REPO_JSON [[{"repos":[]}]])
+set(repo [[{"packages":{
+  "tool":{"source":{"type":"local","url":"."},"default_version":"1","versions":{"1":{}}},
+  "left":{"source":{"type":"local","url":"."},"default_version":"1","host_dependencies":{"tool":{"version":"1"}},"versions":{"1":{}}},
+  "root":{"source":{"type":"local","url":"."},"default_version":"1","dependencies":{"tool":{},"left":{}},"host_dependencies":{"tool":{"version":"1"}},"versions":{"1":{}}}
+}}]])
+set_property(GLOBAL PROPERTY CDPM_MERGED_REPO "${repo}")
+
+function(cdpm_build_dependency pkg version hash meta)
+    cmake_parse_arguments(arg "" "PROFILE;HOST_PREFIXES" "" ${ARGN})
+    get_property(order GLOBAL PROPERTY test_order)
+    list(APPEND order "${arg_PROFILE}:${pkg}")
+    set_property(GLOBAL PROPERTY test_order "${order}")
+    file(MAKE_DIRECTORY "${CDPM_STORE_DIR}/${pkg}/${hash}")
+endfunction()
+
+cdpm_resolve_and_build(root "" context)
+get_property(order GLOBAL PROPERTY test_order)
+assert_eq("${order}" "HOST:tool;TARGET:left;TARGET:tool;TARGET:root" "roles are independent and shared host builds once")
+string(JSON target_tool_hash GET "${context}" managed tool config_hash)
+string(JSON host_tool_hash GET "${context}" host_managed tool config_hash)
+assert_ne("${target_tool_hash}" "${host_tool_hash}" "namespaced tool profiles have distinct hashes")
+string(JSON host_prefix_count LENGTH "${context}" host_prefixes)
+assert_eq("${host_prefix_count}" 1 "context exposes one shared host prefix")
+file(READ "${tmp}/cdpm.lock.json" lock)
+string(JSON target_count LENGTH "${lock}" packages)
+string(JSON host_count LENGTH "${lock}" host_packages)
+assert_eq("${target_count}" 3 "target lock graph")
+assert_eq("${host_count}" 1 "host lock graph")
+message(STATUS "PASS: resolve.host_graph")

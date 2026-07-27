@@ -157,16 +157,25 @@ endfunction()
 # are optional: when those commands are absent (pure hash unit tests) the corresponding components are
 # omitted rather than failing.
 function(cdpm_compute_config_hash pkg_name pkg_version meta_json out_hash)
-    cmake_parse_arguments(arg "" "DEPENDENCY_IDENTITIES;SYSTEM_IDENTITIES" "" ${ARGN})
-    if((DEFINED arg_DEPENDENCY_IDENTITIES OR DEFINED arg_SYSTEM_IDENTITIES) AND NOT COMMAND cdpm_canonical_json)
+    cmake_parse_arguments(arg "HOST" "DEPENDENCY_IDENTITIES;HOST_DEPENDENCY_IDENTITIES;SYSTEM_IDENTITIES" "" ${ARGN})
+    if((DEFINED arg_DEPENDENCY_IDENTITIES OR DEFINED arg_HOST_DEPENDENCY_IDENTITIES
+            OR DEFINED arg_SYSTEM_IDENTITIES) AND NOT COMMAND cdpm_canonical_json)
         include(cdpm_config)
     endif()
     string(TOLOWER "${pkg_name}" name)
 
-    set(parts "${name}@${pkg_version}")
+    if(arg_HOST)
+        set(parts "host:${name}@${pkg_version}")
+    else()
+        set(parts "target:${name}@${pkg_version}")
+    endif()
 
     # ---- Per-language compilers -------------------------------------------------
-    _cdpm_hash_languages_part(lang_part)
+    if(arg_HOST)
+        set(lang_part "host:${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR}")
+    else()
+        _cdpm_hash_languages_part(lang_part)
+    endif()
     if(NOT lang_part STREQUAL "")
         string(APPEND parts "|lang:${lang_part}")
     endif()
@@ -178,7 +187,7 @@ function(cdpm_compute_config_hash pkg_name pkg_version meta_json out_hash)
     # The normalized path and root-file content are both required: byte-identical files at different paths
     # may behave differently through CMAKE_CURRENT_LIST_DIR or relative includes. Included files are not
     # recursively discovered or hashed.
-    if(DEFINED CMAKE_TOOLCHAIN_FILE AND NOT CMAKE_TOOLCHAIN_FILE STREQUAL "")
+    if(NOT arg_HOST AND DEFINED CMAKE_TOOLCHAIN_FILE AND NOT CMAKE_TOOLCHAIN_FILE STREQUAL "")
         set(tc_path "${CMAKE_TOOLCHAIN_FILE}")
         cmake_path(ABSOLUTE_PATH tc_path BASE_DIRECTORY "${CMAKE_SOURCE_DIR}" NORMALIZE OUTPUT_VARIABLE tc_path)
         if(EXISTS "${tc_path}")
@@ -188,12 +197,19 @@ function(cdpm_compute_config_hash pkg_name pkg_version meta_json out_hash)
     endif()
 
     # ---- Platform / generator / build type --------------------------------------
-    set(sys_name "${CMAKE_SYSTEM_NAME}")
+    if(arg_HOST)
+        set(sys_name "${CMAKE_HOST_SYSTEM_NAME}")
+        _cdpm_get_host_processor(sys_proc)
+    else()
+        set(sys_name "${CMAKE_SYSTEM_NAME}")
+    endif()
     if(NOT DEFINED CMAKE_SYSTEM_NAME OR sys_name STREQUAL "")
         set(sys_name "${CMAKE_HOST_SYSTEM_NAME}")
     endif()
-    set(sys_proc "${CMAKE_SYSTEM_PROCESSOR}")
-    if(NOT DEFINED CMAKE_SYSTEM_PROCESSOR OR sys_proc STREQUAL "")
+    if(NOT arg_HOST)
+        set(sys_proc "${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
+    if(sys_proc STREQUAL "")
         _cdpm_get_host_processor(sys_proc)
     endif()
     string(APPEND parts
@@ -227,6 +243,10 @@ function(cdpm_compute_config_hash pkg_name pkg_version meta_json out_hash)
         cdpm_canonical_json("${arg_DEPENDENCY_IDENTITIES}" dependency_identities)
         string(APPEND parts "|dependencies:${dependency_identities}")
     endif()
+    if(DEFINED arg_HOST_DEPENDENCY_IDENTITIES)
+        cdpm_canonical_json("${arg_HOST_DEPENDENCY_IDENTITIES}" host_dependency_identities)
+        string(APPEND parts "|host_dependencies:${host_dependency_identities}")
+    endif()
 
     # ---- Optional toolset -------------------------------------------------------
     if(DEFINED CDPM_TOOLSET AND NOT CDPM_TOOLSET STREQUAL "")
@@ -237,7 +257,9 @@ function(cdpm_compute_config_hash pkg_name pkg_version meta_json out_hash)
     # The same allow-list that cdpm_prepare_toolchain freezes into the wrapper toolchain feeds the hash, so
     # an IDE-injected change (e.g. ANDROID_ABI, CMAKE_OSX_ARCHITECTURES) that is not part of any toolchain
     # file still moves the hash. Falls back to a minimal built-in set when cdpm_toolchain is not loaded.
-    if(COMMAND _cdpm_toolchain_var_list)
+    if(arg_HOST)
+        set(tc_vars "")
+    elseif(COMMAND _cdpm_toolchain_var_list)
         _cdpm_toolchain_var_list(tc_vars)
     else()
         set(tc_vars
