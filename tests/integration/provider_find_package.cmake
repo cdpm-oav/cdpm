@@ -40,6 +40,8 @@ file(WRITE "${tmp}/packages/greet/package.json" [[{
   "build_system": "cmake",
   "source": { "type": "git", "url": "https://example.invalid/greet.git" },
   "default_version": "1.0.0",
+  "components": { "greet": { "type": "interface" } },
+  "default_components": ["greet"],
   "versions": {
     "1.0.0": { "rev": "0000000000000000000000000000000000000000" }
   }

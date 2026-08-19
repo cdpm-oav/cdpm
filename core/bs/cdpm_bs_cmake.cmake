@@ -329,6 +329,29 @@ function(cdpm_bs_cmake_build ctx_json)
         string(APPEND cache_args_block "\n        ${cache_arg}")
     endforeach()
 
+    # Native CPS: forward CMAKE_INSTALL_EXPORTS_AS_PACKAGE_INFO when available.
+    string(JSON pkg_name ERROR_VARIABLE e_name GET "${ctx_json}" "name")
+    string(JSON pkg_version ERROR_VARIABLE e_version GET "${ctx_json}" "version")
+    string(JSON meta_json ERROR_VARIABLE e_meta GET "${ctx_json}" "meta_json")
+    if(NOT e_name AND NOT e_version AND NOT e_meta)
+        string(JSON export_name ERROR_VARIABLE e_export GET "${meta_json}" "export_name")
+        if(NOT e_export AND NOT export_name STREQUAL ""
+           AND CMAKE_VERSION VERSION_GREATER_EQUAL "4.3")
+            _cdpm_cmake_quote_cache_argument(
+                "-DCMAKE_EXPERIMENTAL_MAPPED_PACKAGE_INFO:STRING=ababa1b5-7099-495f-a9cd-e22d38f274f2"
+                "${list_separator}" gate_arg)
+            string(APPEND cache_args_block "\n        ${gate_arg}")
+            _cdpm_cmake_quote_cache_argument(
+                "-DCMAKE_INSTALL_EXPORTS_AS_PACKAGE_INFO:STRING=${export_name}:${pkg_name}/l"
+                "${list_separator}" cps_arg)
+            string(APPEND cache_args_block "\n        ${cps_arg}")
+            _cdpm_cmake_quote_cache_argument(
+                "-D${export_name}_EXPORT_PACKAGE_INFO_VERSION:STRING=@PROJECT_VERSION@"
+                "${list_separator}" ver_arg)
+            string(APPEND cache_args_block "\n        ${ver_arg}")
+        endif()
+    endif()
+
     # ---- Assemble the mini-project ----------------------------------------------
     set(ml "cmake_minimum_required(VERSION 3.25)")
     string(APPEND ml "\nproject(cdpm_ep NONE)")

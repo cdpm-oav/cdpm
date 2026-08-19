@@ -18,6 +18,7 @@ endmacro()
 # The provider is a macro so the replayed find_package result variables remain in the caller's scope.
 macro(cdpm_provide_dependency method_type)
     get_property(_cdpm_replay_active GLOBAL PROPERTY CDPM_PROVIDER_REPLAY_ACTIVE)
+
     if(_cdpm_replay_active AND "${method_type}" STREQUAL "FIND_PACKAGE")
         string(TOLOWER "${ARGV1}" _cdpm_replay_name)
         # Not a managed package in this graph — let CMake's default find logic handle it.
@@ -29,8 +30,10 @@ macro(cdpm_provide_dependency method_type)
         find_package(${ARGN} BYPASS_PROVIDER)
         unset(_cdpm_replay_active)
     else()
-        block(PROPAGATE CMAKE_PREFIX_PATH _cdpm_pkg_name _cdpm_install_dir _cdpm_fp_REQUIRED
-                _cdpm_known _cdpm_replay_names _cdpm_do_find)
+        block(PROPAGATE 
+            CMAKE_PREFIX_PATH 
+            _cdpm_pkg_name _cdpm_install_dir _cdpm_fp_REQUIRED _cdpm_known _cdpm_replay_names _cdpm_do_find
+        )
             _cdpm_ensure_repos_loaded()
             set(_cdpm_pkg_name "${ARGV1}")
             set(_cdpm_install_dir "")
@@ -84,9 +87,11 @@ macro(cdpm_provide_dependency method_type)
             set_property(GLOBAL PROPERTY CDPM_PROVIDER_REPLAY_ACTIVE TRUE)
             set_property(GLOBAL PROPERTY CDPM_PROVIDER_REPLAY_ALLOWED "${_cdpm_replay_names}")
         endif()
+
         if(_cdpm_do_find)
             find_package(${ARGN} BYPASS_PROVIDER)
         endif()
+
         if(_cdpm_known)
             set_property(GLOBAL PROPERTY CDPM_PROVIDER_REPLAY_ACTIVE "${_cdpm_saved_guard}")
             set_property(GLOBAL PROPERTY CDPM_PROVIDER_REPLAY_ALLOWED "${_cdpm_saved_allowed}")
@@ -96,10 +101,14 @@ macro(cdpm_provide_dependency method_type)
             message(FATAL_ERROR "[cdpm] Package '${_cdpm_pkg_name}' was built and installed to "
                 "'${_cdpm_install_dir}', but find_package still could not locate it.")
         endif()
+
         foreach(_cdpm_var IN ITEMS pkg_name install_dir fp_REQUIRED known replay_names do_find saved_guard saved_allowed)
             unset(_cdpm_${_cdpm_var})
         endforeach()
+
         unset(_cdpm_var)
         unset(_cdpm_replay_active)
+        unset(_cdpm_saved_guard)
+        unset(_cdpm_saved_allowed)
     endif()
 endmacro()

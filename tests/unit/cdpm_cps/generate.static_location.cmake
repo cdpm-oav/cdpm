@@ -14,14 +14,16 @@ file(MAKE_DIRECTORY "${install_dir}/lib")
 file(TOUCH "${install_dir}/include/foo.hpp")
 file(TOUCH "${install_dir}/lib/libfoo.a")
 
-# A second declared static component with no installed library must be skipped, and pruned from
-# default_components so the .cps never references a component that is not emitted.
+# 'foo' has no declared type; the static library artifact must let the generator infer 'static'.
+# 'ghost' is explicitly static with no installed library and must be skipped/pruned.
+# 'iface' is explicitly interface to keep the explicit-type path covered.
 set(meta [[{
     "versions": { "2.1.0": {} },
-    "default_components": ["foo", "ghost"],
+    "default_components": ["foo", "ghost", "iface"],
     "components": {
-        "foo": { "type": "static" },
-        "ghost": { "type": "static" }
+        "foo": {},
+        "ghost": { "type": "static" },
+        "iface": { "type": "interface" }
     }
 }]])
 
@@ -50,9 +52,13 @@ assert_json_eq("${ll}" "[\"cpp\"]" "components.foo.link_languages")
 string(JSON ghost ERROR_VARIABLE e_ghost GET "${cps}" "components" "ghost")
 assert_true("${e_ghost}" "ghost component (no library) is skipped")
 
-# ...and must be pruned from default_components (only foo remains).
+# The explicit interface component must be emitted.
+string(JSON iface_type GET "${cps}" "components" "iface" "type")
+assert_eq("${iface_type}" "interface" "components.iface.type")
+
+# ...and default_components must be pruned to emitted components only.
 string(JSON defc GET "${cps}" "default_components")
-assert_json_eq("${defc}" "[\"foo\"]" "default_components pruned to emitted components")
+assert_json_eq("${defc}" "[\"foo\", \"iface\"]" "default_components pruned to emitted components")
 
 file(REMOVE_RECURSE "${tmp}")
-message(STATUS "PASS: static gets location + link_languages; unlocatable component is skipped and pruned")
+message(STATUS "PASS: type inferred from .a; static gets location + link_languages; unlocatable component is skipped and pruned")

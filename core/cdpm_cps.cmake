@@ -19,16 +19,20 @@ include(cdpm_config)
 include(cdpm_utils)
 
 # .. rst:
-# ``_cdpm_cps_find_library(<install_dir> <component> <out_location>)``
+# ``_cdpm_cps_find_library(<install_dir> <component> <out_location> <out_inferred_type>)``
 #
 # Locates the installed library artifact for a compiled ``<component>`` under ``<install_dir>`` and returns
-# a relocatable ``@prefix@/<relpath>`` location in ``<out_location>`` (empty when nothing matches).
+# a relocatable ``@prefix@/<relpath>`` location in ``<out_location>`` (empty when nothing matches). Also
+# returns an inferred CPS ``type`` in ``<out_inferred_type>`` based on the artifact's file extension:
+# ``static`` for ``.a`` / ``.lib`` (without a sibling ``.dll``), ``shared`` for ``.so`` / ``.so.*`` /
+# ``.dylib`` / ``.dll``.
 #
 # Searches ``lib`` then ``lib64`` for the conventional names of a static/shared library (``lib<c>.a``,
 # ``lib<c>.so`` / ``lib<c>.so.*``, ``lib<c>.dylib``, ``<c>.lib``). Store slots hold exactly one build
 # configuration, so the first match wins.
-function(_cdpm_cps_find_library install_dir component out_location)
+function(_cdpm_cps_find_library install_dir component out_location out_inferred_type)
     set(${out_location} "")
+    set(${out_inferred_type} "")
 
     foreach(libdir IN ITEMS "lib" "lib64")
         set(base "${install_dir}/${libdir}")
@@ -46,11 +50,25 @@ function(_cdpm_cps_find_library install_dir component out_location)
             list(GET matches 0 hit)
             cmake_path(RELATIVE_PATH hit BASE_DIRECTORY "${install_dir}" OUTPUT_VARIABLE rel)
             set(${out_location} "@prefix@/${rel}")
-            return(PROPAGATE ${out_location})
+
+            if(hit MATCHES "\\.a$")
+                set(${out_inferred_type} "static")
+            elseif(hit MATCHES "\\.(so|dylib)(\\.|$)" OR hit MATCHES "\\.dll$")
+                set(${out_inferred_type} "shared")
+            elseif(hit MATCHES "\\.lib$")
+                get_filename_component(hit_name "${hit}" NAME_WE)
+                if(EXISTS "${base}/${hit_name}.dll")
+                    set(${out_inferred_type} "shared")
+                else()
+                    set(${out_inferred_type} "static")
+                endif()
+            endif()
+
+            return(PROPAGATE ${out_location} ${out_inferred_type})
         endif()
     endforeach()
 
-    return(PROPAGATE ${out_location})
+    return(PROPAGATE ${out_location} ${out_inferred_type})
 endfunction()
 
 # .. rst:
@@ -151,20 +169,34 @@ function(_cdpm_cps_compose name version install_dir meta_json out_json)
     foreach(comp IN LISTS comp_keys)
         string(JSON comp_spec GET "${comp_decl}" "${comp}")
 
+        set(ctype_declared "")
         set(ctype "interface")
         string(JSON ctype_decl ERROR_VARIABLE e_ctype GET "${comp_spec}" "type")
         if(NOT e_ctype AND NOT ctype_decl STREQUAL "")
             set(ctype "${ctype_decl}")
+            set(ctype_declared "${ctype_decl}")
         endif()
 
         set(location "")
-        if(ctype MATCHES [[(static|shared|module|executable)]])
-            _cdpm_cps_find_library("${install_dir}" "${comp}" location)
-            if(location STREQUAL "")
-                message(WARNING "[cdpm] cps: component '${comp}' (type '${ctype}') of '${name}' has no "
+        set(inferred_type "")
+        _cdpm_cps_find_library("${install_dir}" "${comp}" location inferred_type)
+
+        if(location STREQUAL "")
+            if(ctype_declared MATCHES [[(static|shared|module|executable)]])
+                message(WARNING "[cdpm] cps: component '${comp}' (type '${ctype_declared}') of '${name}' has no "
                     "locatable library under lib/ or lib64/ -- skipping this component."
                 )
                 continue()
+            endif()
+            # No artifact and no declared compiled type: keep the interface default.
+        else()
+            if(ctype_declared STREQUAL "")
+                set(ctype "${inferred_type}")
+            elseif(NOT ctype_declared STREQUAL inferred_type)
+                message(WARNING "[cdpm] cps: component '${comp}' declared type '${ctype_declared}' "
+                    "contradicts inferred type '${inferred_type}' from artifact '${location}' -- "
+                    "keeping declared type."
+                )
             endif()
         endif()
 
@@ -234,6 +266,13 @@ function(cdpm_generate_cps_file pkg_name pkg_version install_dir meta_json)
     endif()
 
     string(TOLOWER "${pkg_name}" name)
+
+    # Skip custom generation if a native .cps file was already installed by the package.
+    set(__cps_file "${install_dir}/lib/cps/${name}.cps")
+    if(EXISTS "${__cps_file}")
+        message(STATUS "[cdpm] cps: using native CPS for ${pkg_name} (${__cps_file})")
+        return()
+    endif()
 
     _cdpm_cps_compose("${name}" "${pkg_version}" "${install_dir}" "${meta_json}" cps_json)
 

@@ -190,6 +190,8 @@ add_unit_tests(MODULE cdpm_cps
         generate.static_location
         generate.compat_requires_platform
         generate.disabled_noop
+        generate.infer_type
+        generate.type_contradiction_warning
 )
 
 add_integration_tests(
