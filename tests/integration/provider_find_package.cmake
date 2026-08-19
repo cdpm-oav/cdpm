@@ -153,8 +153,8 @@ file(TIMESTAMP "${greet_slot}/.cdpm_installed" ts2)
 assert_eq("${ts1}" "${ts2}" "second configure is idempotent (sentinel unchanged)")
 
 # ---------------------------------------------------------------------------
-# Case 3: unknown REQUIRED package falls through to normal find_package and fails with CMake's
-# standard message.
+# Case 3: with the CDPM_ALLOW_SYSTEM_PACKAGES gate at its default (OFF), an unknown REQUIRED
+# package must fail with cdpm's gate error that names the option.
 # ---------------------------------------------------------------------------
 set(unknown_consumer "${tmp}/unknown")
 file(MAKE_DIRECTORY "${unknown_consumer}")
@@ -179,19 +179,74 @@ if(rc3 EQUAL 0)
     message(FATAL_ERROR "FAIL: unknown package configure should have failed.\n${out3}${err3}")
 endif()
 string(FIND "${err3}${out3}" "CDPM_ALLOW_SYSTEM_PACKAGES" gate_hint)
-if(NOT gate_hint EQUAL -1)
-    message(FATAL_ERROR "FAIL: unknown package error should not mention the CDPM_ALLOW_SYSTEM_PACKAGES gate.\n${err3}")
+if(gate_hint EQUAL -1)
+    message(FATAL_ERROR "FAIL: unknown package error must mention the CDPM_ALLOW_SYSTEM_PACKAGES gate.\n${err3}")
 endif()
-string(FIND "${err3}${out3}" "Could not find a package configuration file provided by" cmake_hint)
-if(cmake_hint EQUAL -1)
-    message(FATAL_ERROR "FAIL: unknown package error should be CMake's standard find_package message.\n${err3}")
+
+# ---------------------------------------------------------------------------
+# Case 4: with CDPM_ALLOW_SYSTEM_PACKAGES=ON, the same unknown package falls through to CMake's
+# default find_package and fails with the standard "Could not find a package configuration file" message.
+# ---------------------------------------------------------------------------
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        -S "${unknown_consumer}"
+        -B "${tmp}/unknown-allowed-build"
+        ${gen_args}
+        "-DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=${cdpm_entry}"
+        "-DCDPM_STORE_DIR=${store}"
+        "-DCDPM_PROJECT_CONFIG=${project_config}"
+        "-DCDPM_ALLOW_SYSTEM_PACKAGES=ON"
+    RESULT_VARIABLE rc4
+    OUTPUT_VARIABLE out4
+    ERROR_VARIABLE err4
+)
+if(rc4 EQUAL 0)
+    message(FATAL_ERROR "FAIL: unknown package configure should still fail when allowed to fall back.\n${out4}${err4}")
+endif()
+string(FIND "${err4}${out4}" "CDPM_ALLOW_SYSTEM_PACKAGES" gate_hint4)
+if(NOT gate_hint4 EQUAL -1)
+    message(FATAL_ERROR "FAIL: fallback error must not mention the CDPM_ALLOW_SYSTEM_PACKAGES gate.\n${err4}")
+endif()
+string(FIND "${err4}${out4}" "Could not find a package configuration file provided by" cmake_hint4)
+if(cmake_hint4 EQUAL -1)
+    message(FATAL_ERROR "FAIL: fallback error must be CMake's standard find_package message.\n${err4}")
+endif()
+
+# ---------------------------------------------------------------------------
+# Case 5: a range request for a KNOWN package must be rejected by the provider itself.
+# ---------------------------------------------------------------------------
+set(range_consumer "${tmp}/range")
+file(MAKE_DIRECTORY "${range_consumer}")
+file(WRITE "${range_consumer}/CMakeLists.txt"
+"cmake_minimum_required(VERSION 3.25)\n"
+"project(range_consumer LANGUAGES CXX)\n"
+"find_package(greet 1.0...2.0 REQUIRED)\n")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        -S "${range_consumer}"
+        -B "${tmp}/range-build"
+        ${gen_args}
+        "-DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=${cdpm_entry}"
+        "-DCDPM_STORE_DIR=${store}"
+        "-DCDPM_PROJECT_CONFIG=${project_config}"
+    RESULT_VARIABLE rc5
+    OUTPUT_VARIABLE out5
+    ERROR_VARIABLE err5
+)
+if(rc5 EQUAL 0)
+    message(FATAL_ERROR "FAIL: range request for a known package should have failed.\n${out5}${err5}")
+endif()
+string(FIND "${err5}${out5}" "version-range request '1.0...2.0'" range_msg)
+if(range_msg EQUAL -1)
+    message(FATAL_ERROR "FAIL: provider should reject the range request with a clear message.\n${err5}")
 endif()
 
 # A strict provider can materialize a pinned local git registry without recursively asking itself for Git.
 find_program(git_executable NAMES git REQUIRED)
 set(git_registry "${tmp}/git-registry")
 file(MAKE_DIRECTORY "${git_registry}")
-    file(WRITE "${git_registry}/packages.json" [[{"version":1,"packages":{}}]])
+file(WRITE "${git_registry}/packages.json" [[{"version":1,"packages":{}}]])
 execute_process(COMMAND "${git_executable}" init -q WORKING_DIRECTORY "${git_registry}"
     COMMAND_ERROR_IS_FATAL ANY)
 execute_process(COMMAND "${git_executable}" add packages.json WORKING_DIRECTORY "${git_registry}"

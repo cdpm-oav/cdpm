@@ -98,6 +98,46 @@ function(cdpm_parse_version_range spec out_low out_high out_low_incl out_high_in
 endfunction()
 
 # .. rst:
+# ``_cdpm_require_exact_version(<pkg_name> <context> <spec> <out_ver>)``
+#
+# Validates that ``<spec>`` is a single exact version request, not a version range or malformed token.
+# ``<context>`` is included in diagnostics (e.g. ``find_package`` or a registry dependency context).
+# Empty ``<spec>`` yields an empty output. Legacy plain exact-looking tokens such as
+# ``1.2.3-beta`` are accepted to preserve existing behavior.
+function(_cdpm_require_exact_version pkg_name context spec out_ver)
+    set(${out_ver} "")
+    if(spec STREQUAL "")
+        return(PROPAGATE ${out_ver})
+    endif()
+
+    # Reject any token that carries version-range syntax before parsing. This includes explicit
+    # point ranges such as ``[1.2.3->1.2.3]``; only bare exact versions/pins are supported.
+    if(spec MATCHES "[[]|[]]|[()]|[*]|->|[.][.][.]")
+        message(FATAL_ERROR "[cdpm] package '${pkg_name}': version-range request '${spec}' "
+            "(${context}) is not supported yet; exact requests/pins only.")
+    endif()
+
+    cdpm_parse_version_range("${spec}" low high low_incl high_incl ok)
+    if(ok)
+        if(NOT low STREQUAL "" AND low STREQUAL high AND low_incl AND high_incl)
+            set(${out_ver} "${low}")
+            return(PROPAGATE ${out_ver})
+        endif()
+        message(FATAL_ERROR "[cdpm] package '${pkg_name}': version-range request '${spec}' "
+            "(${context}) is not supported yet; exact requests/pins only.")
+    endif()
+
+    # Accept plain exact-looking tokens (including pre-release/build-metadata suffixes) to keep
+    # legacy behavior; treat everything else as an absent constraint.
+    if(spec MATCHES "^[0-9]")
+        set(${out_ver} "${spec}")
+        return(PROPAGATE ${out_ver})
+    endif()
+
+    return(PROPAGATE ${out_ver})
+endfunction()
+
+# .. rst:
 # ``cdpm_version_in_range(<version> <spec> <out_ok>)``
 #
 # Decides whether ``<version>`` falls inside the range string ``<spec>`` (parsed by

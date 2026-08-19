@@ -3,6 +3,7 @@
 include_guard(GLOBAL)
 
 include(cdpm_resolve)
+include(cdpm_verange)
 
 macro(_cdpm_ensure_repos_loaded)
     get_property(_cdpm_repos_loaded GLOBAL PROPERTY CDPM_PROVIDER_REPOS_LOADED)
@@ -44,14 +45,19 @@ macro(cdpm_provide_dependency method_type)
                 list(LENGTH _cdpm_fp_UNPARSED_ARGUMENTS _cdpm_fp_nargs)
                 if(_cdpm_fp_nargs GREATER 1)
                     list(GET _cdpm_fp_UNPARSED_ARGUMENTS 1 _cdpm_maybe_ver)
-                    if(_cdpm_maybe_ver MATCHES "^[0-9]")
-                        set(_cdpm_req_ver "${_cdpm_maybe_ver}")
-                    endif()
+                    _cdpm_require_exact_version("${_cdpm_pkg_name}" "find_package" "${_cdpm_maybe_ver}" _cdpm_req_ver)
                 endif()
             endif()
 
             cdpm_find_package_in_repo("${_cdpm_pkg_name}" _cdpm_known _cdpm_pkg_key _cdpm_meta)
             if(NOT _cdpm_known)
+                # Child builds of managed packages reuse the provider; they are always considered
+                # nested and must be allowed to fall back to the system find_package.
+                if(NOT CDPM_ALLOW_SYSTEM_PACKAGES AND NOT DEFINED CDPM_INJECT_ROOT)
+                    message(FATAL_ERROR "[cdpm] Package '${_cdpm_pkg_name}' is not provided by any loaded registry.\n"
+                        "Set CDPM_ALLOW_SYSTEM_PACKAGES=ON to fall back to the system find_package, "
+                        "or add a registry that provides it.")
+                endif()
                 # Package not in any loaded repository; let the default find_package below handle it.
             else()
                 cdpm_resolve_and_build("${_cdpm_pkg_key}" "${_cdpm_req_ver}" _cdpm_context)

@@ -1022,6 +1022,12 @@ function(_cdpm_normalize_managed_dependencies pkg_name json context out_json)
                 message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name}.version must "
                     "be a non-empty string.")
             endif()
+            set(original_version "${version}")
+            _cdpm_require_exact_version("${pkg_name}" "${context}.${dependency_name}.version" "${version}" version)
+            if(version STREQUAL "")
+                message(FATAL_ERROR "[cdpm] package '${pkg_name}': dependency '${dependency_name}' "
+                    "version '${original_version}' is not a valid exact version; exact requests/pins only.")
+            endif()
             _cdpm_json_set_safe("${normalized}" version "${version}" STRING normalized)
         endif()
 
@@ -1087,6 +1093,12 @@ function(_cdpm_normalize_host_dependencies pkg_name json context out_json)
         if(version_err OR version_type_err OR NOT version_type STREQUAL "STRING" OR version STREQUAL "")
             message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context}.${dependency_name}.version must be "
                 "a non-empty string.")
+        endif()
+        set(original_version "${version}")
+        _cdpm_require_exact_version("${pkg_name}" "${context}.${dependency_name}.version" "${version}" version)
+        if(version STREQUAL "")
+            message(FATAL_ERROR "[cdpm] package '${pkg_name}': dependency '${dependency_name}' "
+                "version '${original_version}' is not a valid exact version; exact requests/pins only.")
         endif()
         set(normalized "{}")
         _cdpm_json_set_safe("${normalized}" version "${version}" STRING normalized)

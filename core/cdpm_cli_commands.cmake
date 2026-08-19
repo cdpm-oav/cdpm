@@ -268,6 +268,15 @@ function(cdpm_cmd_install pkg_name pkg_version toolchain_file generator)
         message(FATAL_ERROR "[cdpm] 'install' requires a package name.")
     endif()
 
+    if(NOT pkg_version STREQUAL "")
+        _cdpm_require_exact_version("${pkg_name}" "install" "${pkg_version}" __validated_version)
+        if(__validated_version STREQUAL "")
+            message(FATAL_ERROR "[cdpm] package '${pkg_name}': requested version '${pkg_version}' "
+                "is not a valid exact version; exact requests/pins only.")
+        endif()
+        set(pkg_version "${__validated_version}")
+    endif()
+
     foreach(__cmd IN ITEMS cdpm_resolve_and_build)
         if(NOT COMMAND ${__cmd})
             message(FATAL_ERROR "[cdpm] Required function '${__cmd}' is not available. "

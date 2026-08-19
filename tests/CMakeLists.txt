@@ -112,8 +112,13 @@ add_unit_tests(MODULE cdpm_verange
         parse.open_ends
         in_range.membership
         in_ranges.forms_and_excludes
+        require_exact.accepts_exact
     FAIL
         in_range.invalid_fatal
+        require_exact.rejects_range
+        require_exact.rejects_star
+        require_exact.rejects_malformed
+        require_exact.rejects_point_range
 )
 
 add_unit_tests(MODULE cdpm_hash
