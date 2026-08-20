@@ -21,19 +21,17 @@ macro(cdpm_provide_dependency method_type)
     get_property(_cdpm_replay_active GLOBAL PROPERTY CDPM_PROVIDER_REPLAY_ACTIVE)
 
     if(_cdpm_replay_active AND "${method_type}" STREQUAL "FIND_PACKAGE")
-        string(TOLOWER "${ARGV1}" _cdpm_replay_name)
         # Not a managed package in this graph — let CMake's default find logic handle it.
         # If REQUIRED and not found, find_package will fatal on its own.
         find_package(${ARGN} BYPASS_PROVIDER)
-        unset(_cdpm_replay_name)
         unset(_cdpm_replay_active)
     elseif(CDPM_DISABLE OR CDPM_BYPASS OR NOT "${method_type}" STREQUAL "FIND_PACKAGE")
         find_package(${ARGN} BYPASS_PROVIDER)
         unset(_cdpm_replay_active)
     else()
-        block(PROPAGATE 
-            CMAKE_PREFIX_PATH 
-            _cdpm_pkg_name _cdpm_install_dir _cdpm_fp_REQUIRED _cdpm_known _cdpm_replay_names _cdpm_do_find
+        block(PROPAGATE
+            CMAKE_PREFIX_PATH
+            _cdpm_pkg_name _cdpm_install_dir _cdpm_fp_REQUIRED _cdpm_known _cdpm_do_find
         )
             _cdpm_ensure_repos_loaded()
             set(_cdpm_pkg_name "${ARGV1}")
@@ -71,27 +69,12 @@ macro(cdpm_provide_dependency method_type)
                     endforeach()
                     list(PREPEND CMAKE_PREFIX_PATH ${_cdpm_prefixes})
                 endif()
-                set(_cdpm_replay_names "")
-                foreach(_cdpm_kind IN ITEMS managed_find_names system_find_names)
-                    string(JSON _cdpm_name_count LENGTH "${_cdpm_context}" "${_cdpm_kind}")
-                    if(_cdpm_name_count GREATER 0)
-                        math(EXPR _cdpm_name_last "${_cdpm_name_count} - 1")
-                        foreach(_cdpm_i RANGE 0 ${_cdpm_name_last})
-                            string(JSON _cdpm_name GET "${_cdpm_context}" "${_cdpm_kind}" ${_cdpm_i})
-                            string(TOLOWER "${_cdpm_name}" _cdpm_name)
-                            list(APPEND _cdpm_replay_names "${_cdpm_name}")
-                        endforeach()
-                    endif()
-                endforeach()
-                list(REMOVE_DUPLICATES _cdpm_replay_names)
             endif()
         endblock()
 
         if(_cdpm_known)
             get_property(_cdpm_saved_guard GLOBAL PROPERTY CDPM_PROVIDER_REPLAY_ACTIVE)
-            get_property(_cdpm_saved_allowed GLOBAL PROPERTY CDPM_PROVIDER_REPLAY_ALLOWED)
             set_property(GLOBAL PROPERTY CDPM_PROVIDER_REPLAY_ACTIVE TRUE)
-            set_property(GLOBAL PROPERTY CDPM_PROVIDER_REPLAY_ALLOWED "${_cdpm_replay_names}")
         endif()
 
         if(_cdpm_do_find)
@@ -100,7 +83,6 @@ macro(cdpm_provide_dependency method_type)
 
         if(_cdpm_known)
             set_property(GLOBAL PROPERTY CDPM_PROVIDER_REPLAY_ACTIVE "${_cdpm_saved_guard}")
-            set_property(GLOBAL PROPERTY CDPM_PROVIDER_REPLAY_ALLOWED "${_cdpm_saved_allowed}")
         endif()
 
         if(_cdpm_fp_REQUIRED AND NOT "${_cdpm_install_dir}" STREQUAL "" AND NOT ${_cdpm_pkg_name}_FOUND)
@@ -108,13 +90,12 @@ macro(cdpm_provide_dependency method_type)
                 "'${_cdpm_install_dir}', but find_package still could not locate it.")
         endif()
 
-        foreach(_cdpm_var IN ITEMS pkg_name install_dir fp_REQUIRED known replay_names do_find saved_guard saved_allowed)
+        foreach(_cdpm_var IN ITEMS pkg_name install_dir fp_REQUIRED known do_find saved_guard)
             unset(_cdpm_${_cdpm_var})
         endforeach()
 
         unset(_cdpm_var)
         unset(_cdpm_replay_active)
         unset(_cdpm_saved_guard)
-        unset(_cdpm_saved_allowed)
     endif()
 endmacro()
