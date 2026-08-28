@@ -162,6 +162,18 @@ function(cdpm_bs_openssl_build ctx_json)
         set(build_cmd "make" "-j${nproc}")
         set(install_cmd "make" "install_sw")
 
+        # Perl's Configure does not bake -isysroot into the generated Makefile, so the SDK must
+        # stay in the environment for every step that may invoke the compiler. CMake versions
+        # that populate CMAKE_OSX_SYSROOT (e.g. 3.25) do not inject SDKROOT into the build
+        # environment on their own, and the make steps then fail with missing system headers.
+        # When the variable is empty (CMake 4.3 manages SDKROOT itself) the commands stay
+        # plain make invocations.
+        if(CMAKE_OSX_SYSROOT)
+            set(step_env "${CMAKE_COMMAND}" -E env "SDKROOT=${CMAKE_OSX_SYSROOT}")
+            list(PREPEND build_cmd ${step_env})
+            list(PREPEND install_cmd ${step_env})
+        endif()
+
         # ---- Mini-project layout --------------------------------------------------
         set(ep_root "${build_dir}/_cdpm_ep")
         set(ep_bin "${ep_root}/_build")
@@ -207,7 +219,7 @@ function(cdpm_bs_openssl_build ctx_json)
                 list(APPEND configure_env "${tool}=${tool_value}")
             endif()
         endforeach()
-        if(NOT CMAKE_OSX_SYSROOT STREQUAL "")
+        if(CMAKE_OSX_SYSROOT)
             list(APPEND configure_env "SDKROOT=${CMAKE_OSX_SYSROOT}")
         endif()
         _cdpm_bs_quote_command_block("${configure_env}" configure_env_block)
