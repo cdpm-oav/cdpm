@@ -202,10 +202,11 @@ function(cdpm_bs_autotools_build ctx_json)
         string(JSON install_dir GET "${ctx_json}" "install_dir")
         string(JSON source      GET "${ctx_json}" "source")
         string(JSON src_type    GET "${source}" "type")
+        string(JSON ep_target   GET "${ctx_json}" "ep_target")
 
         # If a previous "cdpm clean" removed the install directory but left ExternalProject stamps behind,
         # wipe the stamps so the install step actually runs this time.
-        _cdpm_invalidate_ep_stamps("${build_dir}" "${install_dir}")
+        _cdpm_invalidate_ep_stamps("${build_dir}" "${install_dir}" "${ep_target}")
 
         # Optional members default to empty when absent.
         foreach(member toolchain execution_path program_path build_type prefix_path module_path user_file archive_cache_dir)
@@ -292,7 +293,7 @@ function(cdpm_bs_autotools_build ctx_json)
 
         # ---- Assemble the mini-project --------------------------------------------
         _cdpm_bs_miniproject_header("autotools_build" ml)
-        string(APPEND ml "\nExternalProject_Add(cdpm_pkg")
+        string(APPEND ml "\nExternalProject_Add(${ep_target}")
         string(APPEND ml "\n${download_lines}")
         if(NOT patch_line STREQUAL "")
             string(APPEND ml "\n${patch_line}")

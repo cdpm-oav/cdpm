@@ -31,20 +31,20 @@ function(_cdpm_cleanup_driver_user_file ctx_json)
 endfunction()
 
 # .. rst:
-# ``_cdpm_invalidate_ep_stamps(<build_dir> <install_dir>)``
+# ``_cdpm_invalidate_ep_stamps(<build_dir> <install_dir> <ep_target>)``
 #
 # Removes stale ExternalProject stamp files when the install directory they produced
 # is missing. This forces the driver to re-run the install step instead of trusting stamps
 # left behind by a previous ``cdpm clean`` that removed only the store slot.
-function(_cdpm_invalidate_ep_stamps build_dir install_dir)
+function(_cdpm_invalidate_ep_stamps build_dir install_dir ep_target)
     if(EXISTS "${install_dir}")
         return()
     endif()
 
     # ExternalProject's default stamp directory for the generated mini-project is
-    # ``<build_dir>/_cdpm_ep/_build/cdpm_pkg-prefix/src/cdpm_pkg-stamp``. Remove it
+    # ``<build_dir>/_cdpm_ep/_build/<ep_target>-prefix/src/<ep_target>-stamp``. Remove it
     # so the install step is not skipped by stale stamps.
-    set(stamp_dir "${build_dir}/_cdpm_ep/_build/cdpm_pkg-prefix/src/cdpm_pkg-stamp")
+    set(stamp_dir "${build_dir}/_cdpm_ep/_build/${ep_target}-prefix/src/${ep_target}-stamp")
     if(EXISTS "${stamp_dir}")
         file(REMOVE_RECURSE "${stamp_dir}")
         message(STATUS "[cdpm] invalidated stale ExternalProject stamps: ${stamp_dir}")
@@ -300,6 +300,7 @@ function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
     set(ctx "{}")
     _cdpm_json_set_safe("${ctx}" "profile"      "${arg_PROFILE}"        "STRING" ctx)
     _cdpm_json_set_safe("${ctx}" "name"         "${name}"               "STRING" ctx)
+    _cdpm_json_set_safe("${ctx}" "ep_target"    "cdpm_pkg_${name}"      "STRING" ctx)
     _cdpm_json_set_safe("${ctx}" "version"      "${pkg_version}"        "STRING" ctx)
     _cdpm_json_set_safe("${ctx}" "build_dir"    "${build_dir}"          "STRING" ctx)
     _cdpm_json_set_safe("${ctx}" "install_dir"  "${install_dir}"        "STRING" ctx)

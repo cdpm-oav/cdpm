@@ -102,10 +102,11 @@ function(cdpm_bs_cmake_build ctx_json)
     string(JSON install_dir GET "${ctx_json}" "install_dir")
     string(JSON source      GET "${ctx_json}" "source")
     string(JSON src_type    GET "${source}" "type")
+    string(JSON ep_target   GET "${ctx_json}" "ep_target")
 
     # If a previous "cdpm clean" removed the install directory but left ExternalProject stamps behind,
     # wipe the stamps so the install step actually runs this time.
-    _cdpm_invalidate_ep_stamps("${build_dir}" "${install_dir}")
+    _cdpm_invalidate_ep_stamps("${build_dir}" "${install_dir}" "${ep_target}")
 
     # Optional members default to empty (or "{}" for options) when absent.
     string(JSON options ERROR_VARIABLE e_opts GET "${ctx_json}" "options")
@@ -356,7 +357,7 @@ function(cdpm_bs_cmake_build ctx_json)
     set(ml "cmake_minimum_required(VERSION 3.25)")
     string(APPEND ml "\nproject(cdpm_ep NONE)")
     string(APPEND ml "\ninclude(ExternalProject)")
-    string(APPEND ml "\nExternalProject_Add(cdpm_pkg")
+    string(APPEND ml "\nExternalProject_Add(${ep_target}")
     string(APPEND ml "\n${download_lines}")
     if(NOT patch_line STREQUAL "")
         string(APPEND ml "\n${patch_line}")
