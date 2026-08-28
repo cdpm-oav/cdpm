@@ -10,29 +10,30 @@ include(cdpm_utils)
 include(cdpm_verange)
 include(cdpm_context)
 include(cdpm_registry)
+include(cdpm_toolchain)
 
 # .. rst:
 # ``_cdpm_hash_compiler_part(<lang> <out_part>)``
 #
-# Builds the hash contribution for one enabled language ``<lang>``. The part combines the compiler
-# identity (``CMAKE_<LANG>_COMPILER_ID``), its reported version (``CMAKE_<LANG>_COMPILER_VERSION``) and -
-# when the compiler binary is reachable on disk - the SHA-256 of the binary itself
-# (``file(SHA256 ${CMAKE_<LANG>_COMPILER})``). Hashing the binary, not just the version string, catches
+# Builds the hash contribution for one enabled language ``<lang>``. The authoritative identity is the
+# compiler binary itself: when the binary is reachable on disk we hash it with SHA-256. This catches
 # vendor rebuilds and local patches that keep the same advertised version but change code generation (the
-# same approach vcpkg's ABI hash takes). When the binary is not reachable (cross builds, script mode where
-# only the path string is known) the function degrades gracefully to id + version + path.
+# same approach vcpkg's ABI hash takes), and it makes the hash independent of whether the language was
+# only probed with :cmake:command:`check_language` or fully enabled by ``project()`` / ``enable_language``.
+# When the binary is not reachable (cross builds, script mode where only the path string is known) the
+# function degrades gracefully to id + version + path.
 function(_cdpm_hash_compiler_part lang out_part)
-    set(part "${lang}:${CMAKE_${lang}_COMPILER_ID}-${CMAKE_${lang}_COMPILER_VERSION}")
-
     set(compiler "${CMAKE_${lang}_COMPILER}")
-    if(NOT compiler STREQUAL "")
-        if(EXISTS "${compiler}" AND NOT IS_DIRECTORY "${compiler}")
-            file(SHA256 "${compiler}" bin_hash)
-            string(APPEND part "-bin:${bin_hash}")
-        else()
-            # Binary unreachable: fall back to the path string so a toolchain swap still moves the hash.
-            string(APPEND part "-path:${compiler}")
-        endif()
+    if(compiler STREQUAL "")
+        set(part "${lang}:none")
+    elseif(EXISTS "${compiler}" AND NOT IS_DIRECTORY "${compiler}")
+        # Binary reachable: use its content hash as the authoritative identity.
+        file(SHA256 "${compiler}" bin_hash)
+        set(part "${lang}:bin:${bin_hash}")
+    else()
+        # Binary unreachable: fall back to the declared id/version/path so a toolchain
+        # swap still moves the hash.
+        set(part "${lang}:${CMAKE_${lang}_COMPILER_ID}-${CMAKE_${lang}_COMPILER_VERSION}-path:${compiler}")
     endif()
 
     set(${out_part} "${part}")
@@ -42,23 +43,22 @@ endfunction()
 # .. rst:
 # ``_cdpm_hash_languages_part(<out_part>)``
 #
-# Collects the per-language compiler contributions into a single deterministic string. The set of
-# languages is taken from the global ``ENABLED_LANGUAGES`` property when a real project context exists
-# (provider mode, inside ``project()``). In script mode (``cmake -P`` for the CLI) no languages are
-# enabled, so the function falls back to whichever ``CMAKE_<LANG>_COMPILER`` variables are defined - these
-# are normally populated from the prepared toolchain whose textual content is already folded into the hash
-# separately. Languages are sorted so the order of detection never perturbs the hash.
+# Collects the per-language compiler contributions into a single deterministic string. The canonical
+# language set comes from the defined ``CMAKE_<LANG>_COMPILER`` variables for the known language list;
+# this is independent of which languages the current project happened to ``enable_language()`` so the hash
+# converges between CLI script mode, the orchestrator project and nested provider-injected child builds.
+# A compiler that reports ``-NOTFOUND`` (no working compiler for the language) is skipped so the hash
+# stays clean on C-only hosts. Languages are sorted so the order of detection never perturbs the hash.
 function(_cdpm_hash_languages_part out_part)
-    get_property(langs GLOBAL PROPERTY ENABLED_LANGUAGES)
-
-    if(langs STREQUAL "")
-        # Script-mode fallback: probe the common languages for a defined compiler variable.
-        foreach(candidate IN ITEMS C CXX ASM ASM_NASM CUDA OBJC OBJCXX Fortran Swift)
-            if(DEFINED CMAKE_${candidate}_COMPILER AND NOT CMAKE_${candidate}_COMPILER STREQUAL "")
+    set(langs "")
+    foreach(candidate IN ITEMS C CXX ASM ASM_NASM CUDA OBJC OBJCXX Fortran Swift)
+        if(DEFINED CMAKE_${candidate}_COMPILER)
+            set(comp "${CMAKE_${candidate}_COMPILER}")
+            if(NOT comp STREQUAL "" AND NOT comp MATCHES "-NOTFOUND$")
                 list(APPEND langs "${candidate}")
             endif()
-        endforeach()
-    endif()
+        endif()
+    endforeach()
 
     list(REMOVE_DUPLICATES langs)
     list(SORT langs)
@@ -133,12 +133,17 @@ endfunction()
 # The hash is the leading 16 characters of the SHA-256 of a ``|``-separated component string:
 #
 # * ``<pkg>@<version>`` - identity;
-# * per-language compiler identity, version and binary hash for every enabled language (see
+# * per-language compiler identity for every reachable compiler. The binary content is hashed when the
+#   compiler is reachable on disk; otherwise the declared id/version/path are used (see
 #   :cmake:command:`_cdpm_hash_languages_part`);
 # * ``CMAKE_VERSION`` - CMake injects implicit flags/macros that drift across releases, so the generator
 #   tool version participates (as vcpkg's ABI hash does);
-# * normalized absolute ``CMAKE_TOOLCHAIN_FILE`` path and SHA-256 of that root file's content when one is
-#   set. The path is intentionally part of the identity because toolchains may use
+# * the real toolchain's semantic identifier (path + content hash + frozen allow-list values, see
+#   :cmake:command:`_cdpm_toolchain_semantic_id`). When running under a cdpm wrapper toolchain the wrapper
+#   stamps ``CDPM_TOOLCHAIN_SEMANTIC_ID`` (a real 16-hex id, or the ``native`` sentinel for native builds)
+#   and the hash uses that marker directly, ignoring the wrapper's volatile path and bytes; the sentinel
+#   contributes no component at all, matching a top-level context without a toolchain. The path is
+#   intentionally part of the identity because toolchains may use
 #   ``CMAKE_CURRENT_LIST_DIR`` or relative includes. Transitive include contents are not recursively parsed;
 #   the current contract tracks only the root toolchain identity;
 # * ``CMAKE_SYSTEM_NAME``/``CMAKE_SYSTEM_PROCESSOR``, ``CMAKE_BUILD_TYPE``, ``CMAKE_GENERATOR``;
@@ -171,8 +176,34 @@ function(cdpm_compute_config_hash pkg_name pkg_version meta_json out_hash)
     endif()
 
     # ---- Per-language compilers -------------------------------------------------
+    # HOST profile: host-only tools are identified by the host platform (OS + processor) plus, in a
+    # NATIVE build only, the host C compiler. ``CMAKE_C_COMPILER`` is used because there is no standard
+    # ``CMAKE_HOST_C_COMPILER`` variable; the orchestrator and nested provider builds canonicalize C
+    # through :cmake:command:`check_language`, so the same binary is visible in every context and hash
+    # convergence is guaranteed. Under cross-compilation ``CMAKE_C_COMPILER`` is the TARGET compiler,
+    # while host tools are built natively (the HOST wrapper freezes nothing and includes no external
+    # toolchain), so the compiler identity is deliberately excluded there: a cross consumer and the
+    # matching cross orchestrator both see ``CMAKE_CROSSCOMPILING`` set and converge on the
+    # platform-only slot instead of duplicating host tools per target toolchain. Host tools are not
+    # compiled for a target triple, so the target toolchain, build type and generator never
+    # participate. ``sys:<os>-<proc>`` remains the platform-only slot.
     if(arg_HOST)
-        set(lang_part "host:${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR}")
+        _cdpm_get_host_processor(host_proc)
+        set(lang_part "host:${CMAKE_HOST_SYSTEM_NAME}-${host_proc}")
+        if(NOT CMAKE_CROSSCOMPILING)
+            set(host_compiler "${CMAKE_C_COMPILER}")
+            if(DEFINED host_compiler AND NOT host_compiler STREQUAL ""
+                    AND NOT host_compiler MATCHES "-NOTFOUND$")
+                if(EXISTS "${host_compiler}" AND NOT IS_DIRECTORY "${host_compiler}")
+                    file(SHA256 "${host_compiler}" host_bin_hash)
+                    string(APPEND lang_part ":bin:${host_bin_hash}")
+                else()
+                    string(APPEND lang_part
+                        ":${CMAKE_C_COMPILER_ID}-${CMAKE_C_COMPILER_VERSION}-path:${host_compiler}"
+                    )
+                endif()
+            endif()
+        endif()
     else()
         _cdpm_hash_languages_part(lang_part)
     endif()
@@ -184,15 +215,25 @@ function(cdpm_compute_config_hash pkg_name pkg_version meta_json out_hash)
     string(APPEND parts "|cmake:${CMAKE_VERSION}")
 
     # ---- Root toolchain identity ------------------------------------------------
-    # The normalized path and root-file content are both required: byte-identical files at different paths
-    # may behave differently through CMAKE_CURRENT_LIST_DIR or relative includes. Included files are not
-    # recursively discovered or hashed.
-    if(NOT arg_HOST AND DEFINED CMAKE_TOOLCHAIN_FILE AND NOT CMAKE_TOOLCHAIN_FILE STREQUAL "")
-        set(tc_path "${CMAKE_TOOLCHAIN_FILE}")
-        cmake_path(ABSOLUTE_PATH tc_path BASE_DIRECTORY "${CMAKE_SOURCE_DIR}" NORMALIZE OUTPUT_VARIABLE tc_path)
-        if(EXISTS "${tc_path}")
-            file(SHA256 "${tc_path}" tc_hash)
-            string(APPEND parts "|tc:${tc_path}:${tc_hash}")
+    # Under a cdpm wrapper the wrapper itself must not move the hash; use the semantic marker stamped by
+    # cdpm_prepare_toolchain. Current wrappers never stamp an empty marker: it is either a real 16-hex id
+    # or the "native" sentinel. Both the sentinel and an empty value (wrappers from older cdpm versions)
+    # denote a native build - the whole tc: component is absent, matching the top-level context where no
+    # toolchain is in effect; this also holds when a context sees the sentinel without running under a
+    # wrapper. A real id is written verbatim. Otherwise compute the semantic ID from the real
+    # CMAKE_TOOLCHAIN_FILE so path and content still participate without binding to a generated wrapper.
+    if(NOT arg_HOST)
+        if(DEFINED CDPM_TOOLCHAIN_SEMANTIC_ID)
+            if(NOT CDPM_TOOLCHAIN_SEMANTIC_ID STREQUAL ""
+                    AND NOT CDPM_TOOLCHAIN_SEMANTIC_ID STREQUAL "${__CDPM_TOOLCHAIN_SEMANTIC_NATIVE}")
+                string(APPEND parts "|tc:sem:${CDPM_TOOLCHAIN_SEMANTIC_ID}")
+            endif()
+        elseif(DEFINED CMAKE_TOOLCHAIN_FILE AND NOT CMAKE_TOOLCHAIN_FILE STREQUAL "")
+            _cdpm_toolchain_var_list(tc_vars)
+            _cdpm_toolchain_semantic_id("${CMAKE_TOOLCHAIN_FILE}" "${tc_vars}" sem_id)
+            if(NOT sem_id STREQUAL "")
+                string(APPEND parts "|tc:sem:${sem_id}")
+            endif()
         endif()
     endif()
 
@@ -214,8 +255,13 @@ function(cdpm_compute_config_hash pkg_name pkg_version meta_json out_hash)
     endif()
     string(APPEND parts
         "|sys:${sys_name}-${sys_proc}"
-        "|cfg:${CMAKE_BUILD_TYPE}"
-        "|gen:${CMAKE_GENERATOR}")
+    )
+    if(NOT arg_HOST)
+        string(APPEND parts
+            "|cfg:${CMAKE_BUILD_TYPE}"
+            "|gen:${CMAKE_GENERATOR}"
+        )
+    endif()
 
     # ---- Effective package options ----------------------------------------------
     if(COMMAND cdpm_get_package_options)

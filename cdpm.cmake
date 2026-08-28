@@ -27,3 +27,21 @@ cmake_language(SET_DEPENDENCY_PROVIDER cdpm_provide_dependency
     SUPPORTED_METHODS 
         FIND_PACKAGE
 )
+
+# Language canonicalization: ensure CMAKE_C_COMPILER and CMAKE_CXX_COMPILER are
+# populated whenever cdpm is loaded inside a real project context, so the config hash
+# sees a consistent language set across orchestrator, provider-injected child builds and
+# direct includes after project(). check_language caches its result, so the probes are
+# cheap on subsequent runs and harmless when a compiler is absent (the corresponding
+# variable is simply left unset).
+if(NOT CMAKE_SCRIPT_MODE_FILE
+        AND DEFINED CMAKE_SOURCE_DIR
+        AND NOT CMAKE_SOURCE_DIR STREQUAL "")
+    include(CheckLanguage)
+    if(NOT DEFINED CMAKE_C_COMPILER)
+        check_language(C)
+    endif()
+    if(NOT DEFINED CMAKE_CXX_COMPILER)
+        check_language(CXX)
+    endif()
+endif()

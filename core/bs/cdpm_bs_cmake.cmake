@@ -113,7 +113,9 @@ function(cdpm_bs_cmake_build ctx_json)
     if(e_opts)
         set(options "{}")
     endif()
-    foreach(member toolchain build_type generator prefix_path module_path user_file program_path execution_path archive_cache_dir)
+    foreach(member
+            toolchain build_type generator prefix_path module_path user_file program_path
+            execution_path archive_cache_dir)
         string(JSON ${member} ERROR_VARIABLE e_member GET "${ctx_json}" "${member}")
         if(e_member)
             set(${member} "")
@@ -220,7 +222,8 @@ function(cdpm_bs_cmake_build ctx_json)
         set(list_separator "__CDPM_LIST_SEPARATOR_${separator_index}__")
         set(separator_found FALSE)
         foreach(value IN ITEMS "${install_dir}" "${build_type}" "${toolchain}" "${prefix_path}"
-                "${module_path}" "${user_file}" "${program_path}" "${__inject_file}" "${__CDPM_BUILD_ROOT}")
+                "${module_path}" "${user_file}" "${program_path}" "${__inject_file}" "${__CDPM_BUILD_ROOT}"
+                "${CDPM_LOCKFILE_PATH}" "${CDPM_PROJECT_DIR}")
             string(FIND "${value}" "${list_separator}" separator_position)
             if(NOT separator_position EQUAL -1)
                 set(separator_found TRUE)
@@ -291,13 +294,27 @@ function(cdpm_bs_cmake_build ctx_json)
             "-DCDPM_INJECT_ROOT:PATH=${__CDPM_BUILD_ROOT}" "${list_separator}" cache_arg
         )
         string(APPEND cache_args_block "\n        ${cache_arg}")
+        # The nested provider must read the same lockfile as the orchestrator so the nested
+        # UPDATE hash canary can compare against top-level entries: forward an explicit
+        # lockfile path and the project dir (the default lockfile location) when either is set.
+        foreach(fwd_var IN ITEMS CDPM_LOCKFILE_PATH CDPM_PROJECT_DIR)
+            if(DEFINED "${fwd_var}" AND NOT "${${fwd_var}}" STREQUAL "")
+                _cdpm_cmake_quote_cache_argument(
+                    "-D${fwd_var}:PATH=${${fwd_var}}" "${list_separator}" cache_arg
+                )
+                string(APPEND cache_args_block "\n        ${cache_arg}")
+            endif()
+        endforeach()
     endif()
 
     # Forward all CDPM_* cache variables to child builds so version overrides
-    # and other configuration options are visible to the provider.
+    # and other configuration options are visible to the provider. CDPM_LOCKFILE_PATH and
+    # CDPM_PROJECT_DIR are handled explicitly above (also as regular variables) and are
+    # skipped here to avoid duplicate cache entries.
     get_cmake_property(__all_cache_vars CACHE_VARIABLES)
     foreach(__cache_var IN LISTS __all_cache_vars)
-        if(__cache_var MATCHES "^CDPM_" AND NOT __cache_var MATCHES "^CDPM_PROVIDER_")
+        if(__cache_var MATCHES "^CDPM_" AND NOT __cache_var MATCHES "^CDPM_PROVIDER_"
+                AND NOT __cache_var MATCHES "^CDPM_(LOCKFILE_PATH|PROJECT_DIR)$")
             get_property(__cache_val CACHE "${__cache_var}" PROPERTY VALUE)
             if(NOT __cache_val STREQUAL "")
                 get_property(__cache_type CACHE "${__cache_var}" PROPERTY TYPE)

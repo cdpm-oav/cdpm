@@ -21,6 +21,7 @@ include(cdpm_config)
 include(cdpm_lockfile)
 include(cdpm_context)
 include(cdpm_resolve)
+include(cdpm_orchestrator)
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -124,6 +125,7 @@ Global options (must appear before the command):
                                    Affects config-hash computation and child builds.
   --generator <name>               Specify a build system generator.
                                    Overrides CMAKE_GENERATOR when both are set.
+                                   Must match the target project generator for hash parity.
                                    Affects config-hash computation and child builds.
   --project-dir <path>             Project directory (default: invocation working directory).
                                    Relative paths are resolved from the invocation working directory.
@@ -253,19 +255,23 @@ function(cdpm_cmd_info pkg_name)
     message("")
 endfunction()
 
-# :brief: Builds and installs a package into the store.
-# :param pkg_name:       package name
-# :param pkg_version:    requested version (empty string = use default)
-# :param toolchain_file: absolute path to a CMake toolchain file, or empty string.
-#                        When non-empty, sets CMAKE_TOOLCHAIN_FILE for this scope so
-#                        cdpm_compute_config_hash and cdpm_build_dependency pick it up.
-# :param generator:      build system generator name, or empty string. When non-empty, sets
-#                        CMAKE_GENERATOR for this scope so the config hash and child build pick it up.
-function(cdpm_cmd_install pkg_name pkg_version toolchain_file generator)
+# :brief: Builds and installs a package into the store via the orchestrator project.
+#         The toolchain and generator are read from CMAKE_TOOLCHAIN_FILE / CMAKE_GENERATOR,
+#         which the CLI entry point (cdpm-cli.cmake) resolves from the global options.
+# :param pkg_name:    package name
+# :param pkg_version: requested version (empty string = use default)
+function(cdpm_cmd_install pkg_name pkg_version)
     _cdpm_print_banner()
 
     if(pkg_name STREQUAL "")
         message(FATAL_ERROR "[cdpm] 'install' requires a package name.")
+    endif()
+
+    # The name is interpolated into a generated CMakeLists.txt; keep it to the registry-safe
+    # character set so no shell/CMake metacharacters can escape the interpolation.
+    if(NOT pkg_name MATCHES [[^[A-Za-z0-9_.+-]+$]])
+        message(FATAL_ERROR "[cdpm] 'install': invalid package name '${pkg_name}' "
+            "(must match ^[A-Za-z0-9_.+-]+\\$).")
     endif()
 
     if(NOT pkg_version STREQUAL "")
@@ -277,23 +283,8 @@ function(cdpm_cmd_install pkg_name pkg_version toolchain_file generator)
         set(pkg_version "${__validated_version}")
     endif()
 
-    foreach(__cmd IN ITEMS cdpm_resolve_and_build)
-        if(NOT COMMAND ${__cmd})
-            message(FATAL_ERROR "[cdpm] Required function '${__cmd}' is not available. "
-                                "Check that all core modules are included.")
-        endif()
-    endforeach()
-
-    # Propagate the toolchain into CMAKE_TOOLCHAIN_FILE for this function scope.
-    # cdpm_compute_config_hash reads CMAKE_TOOLCHAIN_FILE directly (hashes its content).
-    if(NOT toolchain_file STREQUAL "")
-        set(CMAKE_TOOLCHAIN_FILE "${toolchain_file}")
-    endif()
-
-    # Propagate the generator into CMAKE_GENERATOR for this function scope.
-    # cdpm_compute_config_hash reads CMAKE_GENERATOR directly (it is part of the hash inputs).
-    if(NOT generator STREQUAL "")
-        set(CMAKE_GENERATOR "${generator}")
+    if(NOT COMMAND cdpm_orchestrator_run)
+        message(FATAL_ERROR "[cdpm] cdpm_orchestrator.cmake is not loaded.")
     endif()
 
     cdpm_config_load()
@@ -301,17 +292,10 @@ function(cdpm_cmd_install pkg_name pkg_version toolchain_file generator)
         _cdpm_resolve_store_dir(__runtime_store)
         _cdpm_resolve_cli_runtime_dir(CDPM_RUNTIME_DIR "${__runtime_store}")
     endif()
-    if(NOT toolchain_file STREQUAL "")
-        message(STATUS "[cdpm] Toolchain: ${toolchain_file}")
-    endif()
-    if(NOT generator STREQUAL "")
-        message(STATUS "[cdpm] Generator: ${generator}")
-    endif()
-    message(STATUS "[cdpm] Installing ${pkg_name} ...")
-    cdpm_resolve_and_build("${pkg_name}" "${pkg_version}" __context)
-    string(JSON __resolved_ver GET "${__context}" version)
-    string(JSON __install_dir GET "${__context}" install_dir)
-    message(STATUS "[cdpm] Done: ${pkg_name}@${__resolved_ver} -> ${__install_dir}")
+
+    message(STATUS "[cdpm] Installing ${pkg_name} via orchestrator ...")
+    cdpm_orchestrator_run("install" "${pkg_name}" "${pkg_version}")
+    message(STATUS "[cdpm] Done: ${pkg_name} installed.")
 endfunction()
 
 # :brief: Removes installed package artifacts from the store.
@@ -366,11 +350,11 @@ function(cdpm_cmd_clean pkg_name pkg_hash)
     endif()
 endfunction()
 
-# :brief: Reads a lockfile and installs every package listed in it.
-# :param lockfile_path:  path to cdpm.lock.json (empty = <project>/cdpm.lock.json)
-# :param toolchain_file: absolute path to a CMake toolchain file, or empty string
-# :param generator:      build system generator name, or empty string
-function(cdpm_cmd_provision lockfile_path toolchain_file generator)
+# :brief: Reads a lockfile and installs every package listed in it via the orchestrator project.
+#         The toolchain and generator are read from CMAKE_TOOLCHAIN_FILE / CMAKE_GENERATOR,
+#         which the CLI entry point (cdpm-cli.cmake) resolves from the global options.
+# :param lockfile_path: path to cdpm.lock.json (empty = <project>/cdpm.lock.json)
+function(cdpm_cmd_provision lockfile_path)
     _cdpm_print_banner()
 
     _cdpm_resolve_project_dir(project_dir)
@@ -385,59 +369,18 @@ function(cdpm_cmd_provision lockfile_path toolchain_file generator)
         message(FATAL_ERROR "[cdpm] Lockfile not found: ${lockfile_path}")
     endif()
 
-    foreach(__cmd IN ITEMS cdpm_resolve_and_build cdpm_read_lockfile)
-        if(NOT COMMAND ${__cmd})
-            message(FATAL_ERROR "[cdpm] Required function '${__cmd}' is not available.")
-        endif()
-    endforeach()
-
-    # Propagate the toolchain/generator so the recomputed config hash matches the install path.
-    if(NOT toolchain_file STREQUAL "")
-        set(CMAKE_TOOLCHAIN_FILE "${toolchain_file}")
-    endif()
-    if(NOT generator STREQUAL "")
-        set(CMAKE_GENERATOR "${generator}")
+    if(NOT COMMAND cdpm_orchestrator_run)
+        message(FATAL_ERROR "[cdpm] cdpm_orchestrator.cmake is not loaded.")
     endif()
 
-    # The lockfile is the authoritative input here: load it (so step-4 version resolution and the
-    # fast-path consult it) and enumerate its packages.
-    cdpm_read_lockfile(PATH "${lockfile_path}")
     cdpm_config_load()
     if(NOT DEFINED CDPM_RUNTIME_DIR OR CDPM_RUNTIME_DIR STREQUAL "")
         _cdpm_resolve_store_dir(__runtime_store NO_CREATE)
         _cdpm_resolve_cli_runtime_dir(CDPM_RUNTIME_DIR "${__runtime_store}")
     endif()
 
-    get_property(__lock_json GLOBAL PROPERTY CDPM_LOCKFILE_JSON)
-    string(JSON __pkg_count ERROR_VARIABLE __err LENGTH "${__lock_json}" "packages")
-    if(__err OR __pkg_count EQUAL 0)
-        message(STATUS "[cdpm] Lockfile contains no packages.")
-        return()
-    endif()
-
-    _cdpm_lockfile_get_roots("${__lock_json}" __root_names)
-    set(__provision_roots "")
-    foreach(__pkg_name IN LISTS __root_names)
-        string(JSON __pinned_version GET
-            "${__lock_json}" packages "${__pkg_name}" version)
-        list(APPEND __provision_roots "${__pkg_name}" "${__pinned_version}")
-        message(STATUS "[cdpm] Verifying ${__pkg_name}@${__pinned_version} ...")
-        cdpm_resolve_and_build("${__pkg_name}" "${__pinned_version}" __context
-            LOCK_MODE VERIFY VALIDATE_ONLY)
-    endforeach()
-
-    list(LENGTH __provision_roots __root_parts)
-    if(__root_parts GREATER 0)
-        math(EXPR __root_last "${__root_parts} - 1")
-        foreach(__i RANGE 0 ${__root_last} 2)
-            math(EXPR __version_index "${__i} + 1")
-            list(GET __provision_roots ${__i} __pkg_name)
-            list(GET __provision_roots ${__version_index} __pinned_version)
-            message(STATUS "[cdpm] Provisioning ${__pkg_name}@${__pinned_version} ...")
-            cdpm_resolve_and_build("${__pkg_name}" "${__pinned_version}" __context LOCK_MODE VERIFY)
-        endforeach()
-    endif()
-
+    message(STATUS "[cdpm] Provisioning from ${lockfile_path} via orchestrator ...")
+    cdpm_orchestrator_run("provision" "" LOCKFILE "${lockfile_path}" VERIFY)
     message(STATUS "[cdpm] Provision complete.")
 endfunction()
 

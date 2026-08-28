@@ -37,10 +37,15 @@ include(cdpm_context)
 # .. rst:
 # ``_cdpm_lockfile_default_path(<out_var>)``
 #
-# Returns the default lockfile path (``<project>/cdpm.lock.json``).
+# Returns the lockfile path. An explicit ``CDPM_LOCKFILE_PATH`` cache variable wins; otherwise the
+# default ``<project>/cdpm.lock.json`` is used.
 function(_cdpm_lockfile_default_path out_var)
-    _cdpm_resolve_project_dir(project_dir)
-    set(${out_var} "${project_dir}/cdpm.lock.json")
+    if(DEFINED CDPM_LOCKFILE_PATH AND NOT CDPM_LOCKFILE_PATH STREQUAL "")
+        set(${out_var} "${CDPM_LOCKFILE_PATH}")
+    else()
+        _cdpm_resolve_project_dir(project_dir)
+        set(${out_var} "${project_dir}/cdpm.lock.json")
+    endif()
     return(PROPAGATE ${out_var})
 endfunction()
 

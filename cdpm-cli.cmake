@@ -279,7 +279,7 @@ elseif(__CDPM_COMMAND STREQUAL "install")
         list(GET CDPM_CLI_ARGS 2 __CDPM_VER)
     endif()
 
-    cdpm_cmd_install("${__CDPM_PKG}" "${__CDPM_VER}" "${CDPM_EFFECTIVE_TOOLCHAIN}" "${CDPM_EFFECTIVE_GENERATOR}")
+    cdpm_cmd_install("${__CDPM_PKG}" "${__CDPM_VER}")
 
 # ---- clean <pkg> [<hash>] -------------------------------------------------
 elseif(__CDPM_COMMAND STREQUAL "clean")
@@ -318,7 +318,7 @@ elseif(__CDPM_COMMAND STREQUAL "provision")
         math(EXPR __CDPM_PROV_IDX "${__CDPM_PROV_IDX} + 1")
     endwhile()
 
-    cdpm_cmd_provision("${__CDPM_LOCKFILE}" "${CDPM_EFFECTIVE_TOOLCHAIN}" "${CDPM_EFFECTIVE_GENERATOR}")
+    cdpm_cmd_provision("${__CDPM_LOCKFILE}")
 
 # ---- add-registry <path> [--scope machine|project] ------------------------
 elseif(__CDPM_COMMAND STREQUAL "add-registry")

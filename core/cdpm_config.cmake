@@ -1270,6 +1270,37 @@ function(_cdpm_validate_repo_package pkg_name pkg_json)
         endif()
     endif()
 
+    string(JSON host_only ERROR_VARIABLE host_only_err GET "${pkg_json}" host_only)
+    if(NOT host_only_err)
+        string(JSON host_only_type TYPE "${pkg_json}" host_only)
+        if(NOT host_only_type STREQUAL "BOOLEAN")
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': host_only must be a boolean.")
+        endif()
+    endif()
+
+    string(JSON find_module_hints ERROR_VARIABLE find_module_err GET "${pkg_json}" find_module)
+    if(NOT find_module_err)
+        string(JSON find_module_type TYPE "${pkg_json}" find_module)
+        if(NOT find_module_type STREQUAL "OBJECT")
+            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': find_module must be an object.")
+        endif()
+        _cdpm_json_foreach("${find_module_hints}" hint_vars)
+        foreach(hint_var IN LISTS hint_vars)
+            if(NOT hint_var MATCHES [[^[A-Z][A-Z0-9_]*$]])
+                message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': find_module key '${hint_var}' "
+                    "must match ^[A-Z][A-Z0-9_]*$.")
+            endif()
+            if(hint_var MATCHES [[^(CMAKE_|CDPM_)]])
+                message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': find_module key '${hint_var}' "
+                    "uses a reserved CMAKE_/CDPM_ prefix; hint variables must not override CMake or "
+                    "cdpm control variables.")
+            endif()
+            string(JSON hint_value GET "${find_module_hints}" "${hint_var}")
+            _cdpm_registry_validate_relative_path("${hint_value}"
+                "repo package '${pkg_name}' find_module.${hint_var}")
+        endforeach()
+    endif()
+
     string(JSON src_type GET "${pkg_json}" "source" "type")
 
     string(JSON versions ERROR_VARIABLE ver_err GET "${pkg_json}" "versions")

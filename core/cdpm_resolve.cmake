@@ -150,6 +150,27 @@ function(_cdpm_resolver_resolve_node role package_name requested_version out_rec
     else()
         cdpm_compute_config_hash("${node_key}" "${version}" "${meta}" config_hash ${hash_args})
     endif()
+
+    # Nested-context canary: a nested UPDATE whose computed hash disagrees with the top-level
+    # lockfile entry means the two contexts would produce different store slots for the same
+    # package - surface that loudly instead of silently duplicating builds.
+    get_property(nested_canary GLOBAL PROPERTY __CDPM_RESOLVER_NESTED)
+    get_property(lock_mode_canary GLOBAL PROPERTY __CDPM_RESOLVER_LOCK_MODE)
+    if(nested_canary AND lock_mode_canary STREQUAL "UPDATE")
+        if(role STREQUAL "HOST")
+            cdpm_lockfile_get("${node_key}" locked locked_entry HOST)
+        else()
+            cdpm_lockfile_get("${node_key}" locked locked_entry)
+        endif()
+        if(locked)
+            string(JSON locked_hash ERROR_VARIABLE locked_hash_err GET "${locked_entry}" config_hash)
+            if(NOT locked_hash_err AND NOT locked_hash STREQUAL config_hash)
+                message(WARNING "[cdpm] nested UPDATE config hash mismatch for '${node_key}': "
+                    "lockfile=${locked_hash} computed=${config_hash}")
+            endif()
+        endif()
+    endif()
+
     get_property(validate_only GLOBAL PROPERTY __CDPM_RESOLVER_VALIDATE_ONLY)
     if(validate_only)
         _cdpm_resolve_store_dir(store NO_CREATE)
@@ -281,9 +302,9 @@ endfunction()
 
 # .. rst:
 # ``cdpm_resolve_and_build(<pkg_name> <requested_version> <out_context_json>
-#                          [LOCK_MODE UPDATE|VERIFY] [VALIDATE_ONLY])``
+#                          [LOCK_MODE UPDATE|VERIFY] [VALIDATE_ONLY] [ROLE TARGET|HOST])``
 function(cdpm_resolve_and_build pkg_name requested_version out_context_json)
-    cmake_parse_arguments(arg "VALIDATE_ONLY" "LOCK_MODE" "" ${ARGN})
+    cmake_parse_arguments(arg "VALIDATE_ONLY" "LOCK_MODE;ROLE" "" ${ARGN})
     if(NOT DEFINED arg_LOCK_MODE OR arg_LOCK_MODE STREQUAL "")
         set(arg_LOCK_MODE UPDATE)
     endif()
@@ -294,6 +315,16 @@ function(cdpm_resolve_and_build pkg_name requested_version out_context_json)
     if(arg_VALIDATE_ONLY AND NOT arg_LOCK_MODE STREQUAL "VERIFY")
         message(FATAL_ERROR "[cdpm] cdpm_resolve_and_build: VALIDATE_ONLY requires LOCK_MODE VERIFY.")
     endif()
+    if(NOT DEFINED arg_ROLE OR arg_ROLE STREQUAL "")
+        set(arg_ROLE TARGET)
+    endif()
+    string(TOUPPER "${arg_ROLE}" arg_ROLE)
+    if(NOT arg_ROLE MATCHES [[^(TARGET|HOST)$]])
+        message(FATAL_ERROR "[cdpm] cdpm_resolve_and_build: ROLE must be TARGET or HOST.")
+    endif()
+
+    get_property(nested GLOBAL PROPERTY __CDPM_RESOLVER_NESTED)
+
     cdpm_config_load()
     get_property(lock_loaded GLOBAL PROPERTY CDPM_LOCKFILE_LOADED)
     if(NOT lock_loaded)
@@ -329,9 +360,10 @@ function(cdpm_resolve_and_build pkg_name requested_version out_context_json)
     set_property(GLOBAL PROPERTY __CDPM_RESOLVER_METAS "{}")
     set_property(GLOBAL PROPERTY __CDPM_RESOLVER_BUILD_ORDER "")
     set_property(GLOBAL PROPERTY __CDPM_RESOLVER_VALIDATE_ONLY "${arg_VALIDATE_ONLY}")
-    _cdpm_resolver_resolve_node(TARGET "${pkg_name}" "${requested_version}" root_record)
+    set_property(GLOBAL PROPERTY __CDPM_RESOLVER_NESTED "${nested}")
+    _cdpm_resolver_resolve_node("${arg_ROLE}" "${pkg_name}" "${requested_version}" root_record)
 
-    if(arg_LOCK_MODE STREQUAL "UPDATE")
+    if(arg_LOCK_MODE STREQUAL "UPDATE" AND NOT nested)
         get_property(staged_entries GLOBAL PROPERTY __CDPM_RESOLVER_STAGED_ENTRIES)
         get_property(staged_host_entries GLOBAL PROPERTY __CDPM_RESOLVER_STAGED_HOST_ENTRIES)
         _cdpm_lockfile_commit_entries("${staged_entries}" HOST_ENTRIES "${staged_host_entries}"
@@ -369,6 +401,11 @@ function(cdpm_resolve_and_build pkg_name requested_version out_context_json)
             __CDPM_RESOLVER_VALIDATE_ONLY)
         set_property(GLOBAL PROPERTY "${property}")
     endforeach()
+    # __CDPM_RESOLVER_NESTED is deliberately NOT reset here: it is process-environment state owned by
+    # cdpm_provider_inject.cmake (TRUE for every resolve inside an ExternalProject child build), not
+    # per-call resolver state. Clearing it would silently downgrade all nested resolves after the
+    # first one to top-level behaviour, silencing the nested-hash canary and letting child builds
+    # commit lockfile entries.
     set(${out_context_json} "${context}")
     return(PROPAGATE ${out_context_json})
 endfunction()

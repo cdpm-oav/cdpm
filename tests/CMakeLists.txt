@@ -136,6 +136,8 @@ add_unit_tests(MODULE cdpm_hash
         compute.manifest_patch
         compute.host_profile
         hash.build_system_override
+        compute.context_independence
+        compute.language_scan
 )
 
 add_unit_tests(MODULE cdpm_toolchain
@@ -144,6 +146,7 @@ add_unit_tests(MODULE cdpm_toolchain
         prepare.freezes_allowlist
         prepare.synthesize
         prepare.host_native
+        prepare.semantic_marker
 )
 
 add_unit_tests(MODULE cdpm_context
@@ -185,6 +188,7 @@ add_unit_tests(MODULE cdpm_lockfile
         write.graph_identities
         write.local_is_dev
         read.structural_validation
+        path.cache_override
     FAIL
         read.bad_json
 )
@@ -208,8 +212,12 @@ add_integration_tests(
         build_autotools_driver
         build_failure_user_cleanup
         cli_context
+        cli_orchestrator_reuse
         cross_ios_simulator
+        hash_context_convergence
         host_tool_graph
+        host_tool_once
+        nested_chain_convergence
         provider_find_package
         provider_graph
         resolver_lock_modes
@@ -298,6 +306,10 @@ add_unit_tests(MODULE cdpm_registry
         load.patch_symlink_escape
         load.manifest_fifo
         load.patch_fifo
+        load.find_module_invalid_key
+        load.find_module_absolute_value
+        load.find_module_reserved_prefix
+        load.host_only_bad_type
 )
 set_tests_properties(
     unit.cdpm_registry.load.manifest_symlink_escape
@@ -321,10 +333,23 @@ add_unit_tests(MODULE cdpm_system_dependencies
         probe.symlink_identity_path
 )
 
+add_unit_tests(MODULE cdpm_orchestrator
+    PASS
+        env_key.determinism
+)
+
+add_unit_tests(MODULE cdpm_provide_dependency
+    PASS
+        hints.applied
+        hints.user_cache_preserved
+        host_only.role
+)
+
 add_unit_tests(MODULE cdpm_resolve
     PASS
         resolve.shared_graph
         resolve.host_graph
+        nested.skip_commit
     FAIL
         resolve.version_conflict
         resolve.cycle
