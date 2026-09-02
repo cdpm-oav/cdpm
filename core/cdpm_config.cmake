@@ -10,214 +10,12 @@ cmake_policy(SET CMP0140 NEW)
 cmake_policy(SET CMP0057 NEW)
 cmake_policy(SET CMP0007 NEW)
 
-include(cdpm_utils) # JSON iteration helpers (_cdpm_json_foreach / _cdpm_json_get).
+include(cdpm_json) # JSON helpers + cdpm_merge_json / cdpm_canonical_json.
+include(cdpm_utils) # Shared helpers.
 include(cdpm_uri) # URI parsing/validation (cdpm_parse_uri) - used by repo source validation.
 include(cdpm_verange) # Version-range primitive (cdpm_parse_version_range) - used to validate patch/option ranges.
 include(cdpm_context)
 include(cdpm_registry)
-
-# .. rst:
-# ``_cdpm_json_set_safe(<json> <key> <value> <value_type> <out_json>)``
-#
-# Wrapper over ``string(JSON ... SET ...)`` that re-inserts a value previously obtained via
-# ``string(JSON ... GET ...)`` while keeping it valid JSON.
-#
-# ``string(JSON ... GET ...)`` unwraps scalars: strings lose their quotes and booleans come back as
-# ``ON``/``OFF`` on the 3.25 baseline. Feeding that raw text back into ``SET`` fails (a bare ``OFF`` or an
-# unquoted string is not valid JSON), so this wrapper re-wraps by type: strings are JSON-quoted, booleans
-# normalized to ``true``/``false``, objects/arrays/numbers/null inserted as-is.
-function(_cdpm_json_set_safe json key value value_type out_json)
-    if(value_type STREQUAL "STRING")
-        # Re-quote and escape the string payload for embedding as a raw JSON token.
-        string(REPLACE "\\" "\\\\" value "${value}")
-        string(REPLACE "\"" "\\\"" value "${value}")
-        set(json_value "\"${value}\"")
-    elseif(value_type STREQUAL "BOOLEAN")
-        if(value)
-            set(json_value "true")
-        else()
-            set(json_value "false")
-        endif()
-    elseif(value_type STREQUAL "NULL")
-        # GET returns an empty string for null; re-emit the JSON literal.
-        set(json_value "null")
-    else()
-        # OBJECT / ARRAY / NUMBER are already valid JSON tokens.
-        set(json_value "${value}")
-    endif()
-    string(JSON updated SET "${json}" "${key}" "${json_value}")
-    set(${out_json} "${updated}")
-    return(PROPAGATE ${out_json})
-endfunction()
-
-# .. rst:
-# ``_cdpm_split_key_operator(<raw_key> <out_key> <out_op>)``
-#
-# Splits a v1 merge operator suffix off a JSON object key.
-#
-# The ``!`` character is an operator only in the final position. A doubled trailing ``!!`` is an escape for
-# a literal key ending in ``!`` (e.g. ``weird!!`` -> key ``weird!``, no operator). Sets ``<out_op>`` to
-# ``REPLACE`` for ``key!`` and to the empty string otherwise; ``<out_key>`` always receives the resolved
-# literal key (escapes collapsed).
-function(_cdpm_split_key_operator raw_key out_key out_op)
-    # Escaped literal: trailing "!!" -> literal single "!" suffix, no operator.
-    if(raw_key MATCHES "!!$")
-        string(REGEX REPLACE "!!$" "!" literal "${raw_key}")
-        set(${out_key} "${literal}")
-        set(${out_op} "")
-        return(PROPAGATE ${out_key} ${out_op})
-    endif()
-
-    # Single trailing "!" -> REPLACE operator.
-    if(raw_key MATCHES "^(.+)!$")
-        set(${out_key} "${CMAKE_MATCH_1}")
-        set(${out_op} "REPLACE")
-        return(PROPAGATE ${out_key} ${out_op})
-    endif()
-
-    set(${out_key} "${raw_key}")
-    set(${out_op} "")
-    return(PROPAGATE ${out_key} ${out_op})
-endfunction()
-
-# .. rst:
-# ``cdpm_merge_json(<base_json> <overlay_json> <out_json>)``
-#
-# Recursively merges ``overlay_json`` over ``base_json``.
-#
-# Default strategy: objects deep-merge; scalars and arrays are replaced by the overlay. The v1 key-suffix
-# operator ``!`` forces full replacement of a key (``"key!": null`` removes the key, disabling deep merge).
-# The merged result never contains operator keys - they are resolved here.
-#
-# When both sides expose a member as an object, the merge recurses; otherwise the overlay value wins. All
-# JSON probes use ERROR_VARIABLE so missing members never abort configure (CMake >= 3.19).
-function(cdpm_merge_json base_json overlay_json out_json)
-    # Determine top-level types; only two objects can be deep-merged.
-    string(JSON base_type ERROR_VARIABLE base_err TYPE "${base_json}")
-    string(JSON overlay_type ERROR_VARIABLE overlay_err TYPE "${overlay_json}")
-
-    # If overlay is not an object, or base is not an object, overlay replaces base.
-    if(overlay_err OR NOT overlay_type STREQUAL "OBJECT"
-            OR base_err OR NOT base_type STREQUAL "OBJECT")
-        set(${out_json} "${overlay_json}")
-        return(PROPAGATE ${out_json})
-    endif()
-
-    set(result "${base_json}")
-
-    _cdpm_json_foreach("${overlay_json}" overlay_keys)
-    foreach(raw_key IN LISTS overlay_keys)
-        _cdpm_split_key_operator("${raw_key}" key op)
-        _cdpm_json_get("${overlay_json}" "${raw_key}" overlay_value overlay_value_type)
-
-        if(op STREQUAL "REPLACE")
-            # Explicit replace/remove: never deep-merge this key.
-            if(overlay_value_type STREQUAL "NULL")
-                string(JSON result ERROR_VARIABLE rm_err REMOVE "${result}" "${key}")
-                # Removing an absent key is not an error for us.
-                if(rm_err)
-                    # Key was absent in base - nothing to remove; keep result as-is.
-                endif()
-            else()
-                _cdpm_json_set_safe("${result}" "${key}" "${overlay_value}"
-                    "${overlay_value_type}" result)
-            endif()
-            continue()
-        endif()
-
-        # Default strategy: deep-merge only when both base and overlay members are objects.
-        _cdpm_json_get("${result}" "${key}" base_value base_value_type)
-
-        if(overlay_value_type STREQUAL "OBJECT" AND base_value_type STREQUAL "OBJECT")
-            cdpm_merge_json("${base_value}" "${overlay_value}" merged_child)
-            string(JSON result SET "${result}" "${key}" "${merged_child}")
-        else()
-            # Scalars and arrays: overlay replaces (booleans normalized to JSON literals).
-            _cdpm_json_set_safe("${result}" "${key}" "${overlay_value}"
-                "${overlay_value_type}" result)
-        endif()
-    endforeach()
-
-    set(${out_json} "${result}")
-    return(PROPAGATE ${out_json})
-endfunction()
-
-# .. rst:
-# ``cdpm_canonical_json(<json> <out_json>)``
-#
-# Produces a canonical form of ``json`` for stable hashing: object keys are sorted recursively and
-# booleans are normalized to the literals ``true``/``false``.
-#
-# Rationale: on the CMake 3.25 baseline ``string(JSON ... GET ...)`` returns booleans as ``ON``/``OFF``, so
-# a naive get-then-set round-trip could turn ``"x": true`` into ``"x": ON`` and change ``config_hash`` for
-# an unchanged config. This function therefore re-emits booleans from their ``TYPE``, never from the raw
-# ``GET`` text. Whitespace minimization is left to the caller's hash input (string(JSON SET) already yields
-# compact, key-stable output).
-function(cdpm_canonical_json json out_json)
-    string(JSON value_type ERROR_VARIABLE type_err TYPE "${json}")
-
-    if(type_err)
-        # Not valid JSON we can introspect - pass through unchanged.
-        set(${out_json} "${json}")
-        return(PROPAGATE ${out_json})
-    endif()
-
-    if(value_type STREQUAL "OBJECT")
-        _cdpm_json_foreach("${json}" keys)
-        list(SORT keys)
-
-        # Rebuild from an empty object so member order is deterministic.
-        set(canonical "{}")
-        foreach(key IN LISTS keys)
-            _cdpm_json_get("${json}" "${key}" child child_type)
-            if(child_type MATCHES [[^(OBJECT|ARRAY)$]])
-                # Recurse to sort nested members; result is valid JSON, set directly.
-                cdpm_canonical_json("${child}" child_canonical)
-                string(JSON canonical SET "${canonical}" "${key}" "${child_canonical}")
-            else()
-                # Scalars: re-wrap by type (handles ON/OFF -> true/false, string quoting).
-                _cdpm_json_set_safe("${canonical}" "${key}" "${child}" "${child_type}" canonical)
-            endif()
-        endforeach()
-        set(${out_json} "${canonical}")
-        return(PROPAGATE ${out_json})
-    endif()
-
-    if(value_type STREQUAL "ARRAY")
-        # Arrays are order-significant - canonicalize elements, keep order.
-        string(JSON arr_len ERROR_VARIABLE len_err LENGTH "${json}")
-        set(canonical "[]")
-        if(NOT len_err AND arr_len GREATER 0)
-            math(EXPR arr_last "${arr_len} - 1")
-            foreach(i RANGE 0 ${arr_last})
-                string(JSON element_type ERROR_VARIABLE et_err TYPE "${json}" ${i})
-                string(JSON element GET "${json}" ${i})
-                if(element_type MATCHES [[^(OBJECT|ARRAY)$]])
-                    cdpm_canonical_json("${element}" element_canonical)
-                    string(JSON canonical SET "${canonical}" ${i} "${element_canonical}")
-                else()
-                    _cdpm_json_set_safe("${canonical}" ${i} "${element}" "${element_type}" canonical)
-                endif()
-            endforeach()
-        endif()
-        set(${out_json} "${canonical}")
-        return(PROPAGATE ${out_json})
-    endif()
-
-    if(value_type STREQUAL "BOOLEAN")
-        # Normalize ON/OFF (and any truthy form) back to JSON literals.
-        if(json)
-            set(${out_json} "true")
-        else()
-            set(${out_json} "false")
-        endif()
-        return(PROPAGATE ${out_json})
-    endif()
-
-    # STRING / NUMBER / NULL - emit as-is.
-    set(${out_json} "${json}")
-    return(PROPAGATE ${out_json})
-endfunction()
 
 # =============================================================================
 # Config layer loading
@@ -2048,7 +1846,7 @@ function(cdpm_get_package_user_kv pkg_name out_tracked_json out_untracked_json)
         endif()
 
         # value (required) + its JSON type, re-wrapped safely on output.
-        _cdpm_json_get("${entry}" "value" val val_type)
+        _cdpm_json_get(val "${entry}" PATH "value" OUT_TYPE val_type)
         if(val_type STREQUAL "")
             message(FATAL_ERROR "[cdpm] package '${name}' user key '${key}': missing 'value'.")
         endif()
@@ -2222,7 +2020,7 @@ function(cdpm_generate_user_file pkg_name out_path)
 
     _cdpm_json_foreach("${delivery}" keys)
     foreach(key IN LISTS keys)
-        _cdpm_json_get("${delivery}" "${key}" val val_type)
+        _cdpm_json_get(val "${delivery}" PATH "${key}" OUT_TYPE val_type)
         _cdpm_user_key_to_cmake("${key}" var_suffix)
         list(APPEND var_names "${var_suffix}")
 

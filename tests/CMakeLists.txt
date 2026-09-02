@@ -226,6 +226,18 @@ add_integration_tests(
         provider_fmt_e2e
 )
 
+add_unit_tests(MODULE cdpm_json
+    PASS
+        get.paths_and_types
+        keys_and_arrays
+        set_append_remove
+        get_members.bulk
+    FAIL
+        get.required_missing
+        get.wrong_type
+        get.empty_value
+)
+
 add_unit_tests(MODULE cdpm_config
     PASS
         add_registry.cli_command

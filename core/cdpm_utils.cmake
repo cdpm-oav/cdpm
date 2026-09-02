@@ -10,6 +10,8 @@ cmake_policy(SET CMP0140 NEW)
 cmake_policy(SET CMP0057 NEW)
 cmake_policy(SET CMP0007 NEW)
 
+include(cdpm_json) # JSON helpers (_cdpm_json_get/_cdpm_json_keys/_cdpm_json_foreach/...) shared across modules.
+
 # .. rst:
 # ``_cdpm_get_host_processor(<out_var>)``
 #
@@ -24,59 +26,6 @@ function(_cdpm_get_host_processor out_var)
     cmake_host_system_information(RESULT os_platform QUERY OS_PLATFORM)
     set(${out_var} "${os_platform}")
     return(PROPAGATE ${out_var})
-endfunction()
-
-# .. rst:
-# ``_cdpm_json_foreach(<json> <out_keys>)``
-#
-# Collects the member names of a JSON object into ``<out_keys>`` (a CMake list).
-# This is the single guarded entry point for iterating JSON objects; callers run their own ``foreach(key IN LISTS <out_keys>)`` 
-# and fetch type/value via ``_cdpm_json_get``.
-#
-# Safe on empty objects and on non-object / missing input: in those cases the output list is empty and no fatal error is raised 
-# (uses ``ERROR_VARIABLE``). Because the keys are copied out first, removing members from the source object inside the loop is safe 
-# (indices are not shifted under the iterator).
-macro(_cdpm_json_foreach json out_keys)
-    block(SCOPE_FOR VARIABLES PROPAGATE "${out_keys}")
-        set(${out_keys} "")
-        string(JSON len ERROR_VARIABLE err LENGTH "${json}")
-        # err is empty on success; "NOTFOUND"/message on empty or non-object input.
-        if(NOT err AND len GREATER 0)
-            math(EXPR last "${len} - 1")
-            foreach(i RANGE 0 ${last})
-                string(JSON json_member MEMBER "${json}" ${i})
-                list(APPEND ${out_keys} "${json_member}")
-            endforeach()
-        endif()
-    endblock()
-endmacro()
-
-# .. rst:
-# ``_cdpm_json_get(<json> <key> <out_value> <out_type>)``
-#
-# Companion to ``_cdpm_json_foreach``: fetches the value and CMake JSON type of a single member. 
-# ``<out_type>`` is one of OBJECT | ARRAY | STRING | NUMBER | BOOLEAN | NULL, or empty when the key is absent. 
-# ``<out_value>`` is empty when the key is absent. 
-# Uses ``ERROR_VARIABLE`` so a missing key never aborts configure.
-#
-# Note: ``string(JSON ... GET ...)`` returns booleans as ``ON``/``OFF`` on the 3.25 baseline, not ``true``/``false`` — 
-# callers that hash values must normalize via ``<out_type>``.
-function(_cdpm_json_get json key out_value out_type)
-    string(JSON value_type ERROR_VARIABLE type_err TYPE "${json}" "${key}")
-    if(type_err)
-        set(${out_value} "")
-        set(${out_type} "")
-        return(PROPAGATE ${out_value} ${out_type})
-    endif()
-
-    string(JSON value ERROR_VARIABLE get_err GET "${json}" "${key}")
-    if(get_err)
-        set(value "")
-    endif()
-
-    set(${out_value} "${value}")
-    set(${out_type} "${value_type}")
-    return(PROPAGATE ${out_value} ${out_type})
 endfunction()
 
 # .. rst:
