@@ -4,7 +4,7 @@ include_guard(GLOBAL)
 
 cmake_policy(SET CMP0140 NEW)
 
-# JSON iteration helpers (_cdpm_json_foreach).
+# JSON iteration helpers.
 include(cdpm_utils)
 
 # .. rst:

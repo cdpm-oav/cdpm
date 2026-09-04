@@ -296,7 +296,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/identity.json" "${identity}")
 ]=])
 
     set(identities "{}")
-    _cdpm_json_foreach("${dependencies}" dependency_names)
+    _cdpm_json_keys(dependency_names "${dependencies}")
     foreach(dependency_name IN LISTS dependency_names)
         string(JSON spec GET "${dependencies}" "${dependency_name}")
         string(SHA256 dependency_hash "${dependency_name}|${spec}")

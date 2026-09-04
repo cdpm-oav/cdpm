@@ -4,7 +4,7 @@ include_guard(GLOBAL)
 
 cmake_policy(SET CMP0140 NEW)
 
-# JSON iteration helpers (_cdpm_json_foreach / _cdpm_json_get).
+# JSON iteration helpers.
 include(cdpm_utils)
 
 # ExternalProject re-embeds values in bracket arguments through ``cmake_language(EVAL)``. Reject any

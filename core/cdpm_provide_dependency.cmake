@@ -17,7 +17,7 @@ function(_cdpm_apply_find_module_hints meta_json install_dir)
         return()
     endif()
 
-    _cdpm_json_foreach("${hints}" hint_vars)
+    _cdpm_json_keys(hint_vars "${hints}")
     foreach(hint_var IN LISTS hint_vars)
         string(JSON rel_path GET "${hints}" "${hint_var}")
         set(hint_path "${install_dir}/${rel_path}")

@@ -4,7 +4,7 @@ include_guard(GLOBAL)
 
 cmake_policy(SET CMP0140 NEW)
 
-# JSON iteration helpers (_cdpm_json_foreach / _cdpm_json_get) and the shared
+# JSON iteration helpers (_cdpm_json_keys / _cdpm_json_get) and the shared
 # patch-applicability resolver (cdpm_resolve_patch_list).
 include(cdpm_utils)
 include(cdpm_verange)

@@ -23,9 +23,9 @@ assert_eq("${joined}" "x,y,z" "array to list")
 _cdpm_json_array_to_list(mi "${doc}" PATH missing)
 assert_empty("${mi}" "missing array yields empty list")
 
-# Back-compat foreach shim.
-_cdpm_json_foreach("${doc}" tk)
+# Top-level keys (no PATH).
+_cdpm_json_keys(tk "${doc}")
 list(LENGTH tk ntop)
-assert_eq("${ntop}" "3" "foreach shim lists top-level keys")
+assert_eq("${ntop}" "3" "lists top-level keys")
 
 message(STATUS "PASS: json keys and array helpers")

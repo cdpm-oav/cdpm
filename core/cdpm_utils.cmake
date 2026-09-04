@@ -10,7 +10,7 @@ cmake_policy(SET CMP0140 NEW)
 cmake_policy(SET CMP0057 NEW)
 cmake_policy(SET CMP0007 NEW)
 
-include(cdpm_json) # JSON helpers (_cdpm_json_get/_cdpm_json_keys/_cdpm_json_foreach/...) shared across modules.
+include(cdpm_json) # JSON helpers shared across modules.
 
 # .. rst:
 # ``_cdpm_get_host_processor(<out_var>)``

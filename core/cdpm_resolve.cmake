@@ -88,7 +88,7 @@ function(_cdpm_resolver_resolve_node role package_name requested_version out_rec
             set(edge_map "${host_dependencies}")
             set(identity_map host_dependency_identities)
         endif()
-        _cdpm_json_foreach("${edge_map}" dependency_names)
+        _cdpm_json_keys(dependency_names "${edge_map}")
         foreach(dependency_name IN LISTS dependency_names)
         string(JSON dependency_spec GET "${edge_map}" "${dependency_name}")
         string(JSON dependency_version ERROR_VARIABLE dependency_version_err GET "${dependency_spec}" version)

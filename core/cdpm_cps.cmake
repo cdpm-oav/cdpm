@@ -13,7 +13,7 @@ cmake_policy(SET CMP0140 NEW)
 # CMake refuse the file, so pin to the highest revision the target tool accepts.
 set(__CDPM_CPS_VERSION "0.14.1" CACHE INTERNAL "CPS schema revision emitted by cdpm")
 
-# JSON helpers (_cdpm_json_foreach / _cdpm_json_get), _cdpm_json_set_safe and cdpm_canonical_json.
+# JSON helpers (_cdpm_json_keys / _cdpm_json_get), _cdpm_json_set_safe and cdpm_canonical_json.
 include(cdpm_config)
 # Host processor fallback for the platform.isa field in script mode.
 include(cdpm_utils)
@@ -165,7 +165,7 @@ function(_cdpm_cps_compose name version install_dir meta_json out_json)
     endif()
 
     set(emitted_comps "")
-    _cdpm_json_foreach("${comp_decl}" comp_keys)
+    _cdpm_json_keys(comp_keys "${comp_decl}")
     foreach(comp IN LISTS comp_keys)
         string(JSON comp_spec GET "${comp_decl}" "${comp}")
 

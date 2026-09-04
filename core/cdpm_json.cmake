@@ -218,12 +218,6 @@ function(_cdpm_json_type out_type json)
 endfunction()
 
 # .. rst:
-# ``_cdpm_json_foreach(<json> <out_keys>)`` - back-compat shim over ``_cdpm_json_keys``.
-macro(_cdpm_json_foreach json out_keys)
-    _cdpm_json_keys(${out_keys} "${json}")
-endmacro()
-
-# .. rst:
 # ``_cdpm_json_get_members(<out_prefix> <json> KEYS <k>... [PATH ...] [REQUIRED] [NON_EMPTY]``
 # ``[EXPECT_TYPE <t>] [CONTEXT <msg>])``
 #
