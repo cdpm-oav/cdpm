@@ -2,10 +2,10 @@
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
 # JSON iteration helpers.
-include(cdpm_utils)
+include(cdpm_basics)
 
 # Shared driver utilities (download/patch/quote helpers).
 include(cdpm_bs_common)

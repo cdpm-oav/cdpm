@@ -2,13 +2,12 @@
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
-# JSON iteration helpers (_cdpm_json_keys / _cdpm_json_get) and the shared
-# patch-applicability resolver (cdpm_resolve_patch_list).
-include(cdpm_utils)
+# Shared foundation (JSON helpers, _cdpm_get_host_processor, toolchain freeze constants/allow-list) plus
+# the version-range primitive, registry (patch path resolution) and toolchain semantic id.
+include(cdpm_basics)
 include(cdpm_verange)
-include(cdpm_context)
 include(cdpm_registry)
 include(cdpm_toolchain)
 

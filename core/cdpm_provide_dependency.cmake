@@ -2,6 +2,8 @@
 
 include_guard(GLOBAL)
 
+cmake_policy(VERSION 3.25...4.0)
+
 include(cdpm_resolve)
 include(cdpm_verange)
 

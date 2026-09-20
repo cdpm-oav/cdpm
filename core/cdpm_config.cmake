@@ -2,19 +2,11 @@
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
-# Modules carry no cmake_minimum_required, so set the policies they rely on explicitly to stay correct
-# when included from a bare script under the 3.25 baseline:
-#   CMP0057 -- if(... IN_LIST ...) operator;
-#   CMP0007 -- list() commands do not silently drop empty elements (index math stays correct).
-cmake_policy(SET CMP0057 NEW)
-cmake_policy(SET CMP0007 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
-include(cdpm_json) # JSON helpers + cdpm_merge_json / cdpm_canonical_json.
-include(cdpm_utils) # Shared helpers.
+include(cdpm_basics) # Shared foundation: JSON helpers, path resolution (store/project), base primitives.
 include(cdpm_uri) # URI parsing/validation (cdpm_parse_uri) - used by repo source validation.
 include(cdpm_verange) # Version-range primitive (cdpm_parse_version_range) - used to validate patch/option ranges.
-include(cdpm_context)
 include(cdpm_registry)
 
 # =============================================================================
@@ -862,7 +854,6 @@ endfunction()
 # Normalizes build-time host dependencies. Host edges intentionally support only an exact, non-empty
 # ``version`` request: components belong to target package consumption and are not meaningful for tools.
 function(_cdpm_normalize_host_dependencies pkg_name json context out_json)
-    cmake_policy(SET CMP0054 NEW)
     string(JSON map_type ERROR_VARIABLE map_err TYPE "${json}")
     if(map_err OR NOT map_type STREQUAL "OBJECT")
         message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': ${context} must be an object map.")
@@ -1205,41 +1196,8 @@ function(cdpm_load_repo repo_file)
     _cdpm_registry_load_repo("${repo_file}" "${masks_json}")
 endfunction()
 
-# .. rst:
-# ``_cdpm_resolve_store_dir(<out_dir>)``
-#
-# Resolves the cdpm store directory with this precedence: the ``CDPM_STORE_DIR`` cache variable, then the
-# merged config's ``store_dir`` (``CDPM_EFFECTIVE_CONFIG``; ignored when null/empty),
-# then the platform default ``$ENV{HOME}/.cdpm/store`` (``$ENV{LOCALAPPDATA}/cdpm/store`` on Windows). The
-# directory is created if missing.
-function(_cdpm_resolve_store_dir out_dir)
-    cmake_parse_arguments(arg "NO_CREATE" "" "" ${ARGN})
-    if(DEFINED CDPM_STORE_DIR AND NOT CDPM_STORE_DIR STREQUAL "")
-        set(dir "${CDPM_STORE_DIR}")
-    else()
-        set(dir "")
-        get_property(eff GLOBAL PROPERTY CDPM_EFFECTIVE_CONFIG)
-        if(eff)
-            string(JSON cfg_dir ERROR_VARIABLE dir_err GET "${eff}" "store_dir")
-            if(NOT dir_err AND NOT cfg_dir STREQUAL "")
-                set(dir "${cfg_dir}")
-            endif()
-        endif()
-        if(dir STREQUAL "")
-            if(CMAKE_HOST_WIN32 AND DEFINED ENV{LOCALAPPDATA})
-                set(dir "$ENV{LOCALAPPDATA}/cdpm/store")
-            else()
-                set(dir "$ENV{HOME}/.cdpm/store")
-            endif()
-        endif()
-    endif()
-
-    if(NOT arg_NO_CREATE)
-        file(MAKE_DIRECTORY "${dir}")
-    endif()
-    set(${out_dir} "${dir}")
-    return(PROPAGATE ${out_dir})
-endfunction()
+# ``_cdpm_resolve_store_dir`` now lives in cdpm_basics (shared foundation); it reads the effective-config
+# ``store_dir`` from the GLOBAL property without a config include, so it is available to every module.
 
 # .. rst:
 # ``_cdpm_clone_repo_baseline(<url> <baseline> <out_repo_file>)``

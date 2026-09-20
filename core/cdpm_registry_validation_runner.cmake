@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.25...4.0)
 
 if(NOT DEFINED CDPM_REGISTRY_VALIDATION_PATH OR CDPM_REGISTRY_VALIDATION_PATH STREQUAL "")
     message(FATAL_ERROR "[cdpm] registry validation runner requires CDPM_REGISTRY_VALIDATION_PATH.")

@@ -1,8 +1,7 @@
 # Test: context defaults preserve library behavior.
-cmake_policy(SET CMP0011 NEW)
-cmake_policy(SET CMP0140 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
-include(cdpm_context)
+include(cdpm_basics)
 include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/resolve_defaults")

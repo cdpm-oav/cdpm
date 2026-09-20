@@ -2,21 +2,15 @@
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
-# JSON helpers, config (source/options/user), toolchain synthesis, config hash.
-include(cdpm_utils)
+# Shared foundation (paths, JSON helpers), config (source/options/user), toolchain synthesis, config hash.
+include(cdpm_basics)
 include(cdpm_verange)
 include(cdpm_config)
 include(cdpm_toolchain)
 include(cdpm_hash)
 include(cdpm_cps)
-include(cdpm_context)
-
-# cdpm root (parent of core/) captured at include time. Driver module paths from the
-# registry are relative to this root (e.g. core/bs/cdpm_bs_cmake.cmake).
-cmake_path(GET CMAKE_CURRENT_LIST_DIR PARENT_PATH __CDPM_BUILD_ROOT)
-set(__CDPM_BUILD_ROOT "${__CDPM_BUILD_ROOT}" CACHE INTERNAL "cdpm root dir for build drivers")
 
 # .. rst:
 # ``_cdpm_cleanup_driver_user_file(<ctx_json>)``
@@ -56,9 +50,9 @@ endfunction()
 #
 # Returns a shared cache directory path for URL-type sources, keyed by SHA-256.
 # For git/local sources, or URL sources without a SHA-256 pin, returns an empty
-# string. The path lives under ``CDPM_CACHE_PATH`` (falling back to
-# ``${CMAKE_BINARY_DIR}/.cdpm``) so already-downloaded archives can be reused
-# across packages: ``<cache_root>/.cdpm_archives/<sha256[:16]>/``.
+# string. The path lives under the shared cache root (see
+# :cmake:command:`_cdpm_resolve_cache_dir`) so already-downloaded archives can be
+# reused across packages: ``<cache_root>/.cdpm_archives/<sha256[:16]>/``.
 function(_cdpm_resolve_archive_cache_dir source_json out_dir)
     string(JSON src_type ERROR_VARIABLE type_err GET "${source_json}" "type")
     if(type_err OR NOT src_type STREQUAL "url")
@@ -72,11 +66,7 @@ function(_cdpm_resolve_archive_cache_dir source_json out_dir)
         return(PROPAGATE ${out_dir})
     endif()
 
-    if(DEFINED CDPM_CACHE_PATH AND NOT CDPM_CACHE_PATH STREQUAL "")
-        set(cache_root "${CDPM_CACHE_PATH}")
-    else()
-        set(cache_root "${CMAKE_BINARY_DIR}/.cdpm")
-    endif()
+    _cdpm_resolve_cache_dir(cache_root)
 
     string(SUBSTRING "${sha}" 0 16 hash_prefix)
     string(TOLOWER "${hash_prefix}" hash_prefix)
@@ -217,7 +207,7 @@ function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
 
     _cdpm_resolve_store_dir(store)
     _cdpm_resolve_runtime_dir(runtime_dir)
-    set(install_dir "${store}/${name}/${config_hash}")
+    _cdpm_install_slot_dir("${store}" "${name}" "${config_hash}" install_dir)
 
     if(EXISTS "${install_dir}/.cdpm_installed")
         file(REMOVE "${runtime_dir}/user/${name}-${config_hash}.cmake")
@@ -248,7 +238,7 @@ function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
     endif()
 
     # ---- Build directory --------------------------------------------------------
-    set(build_dir "${runtime_dir}/bs/${name}-${config_hash}")
+    _cdpm_build_slot_dir("${runtime_dir}" "${name}" "${config_hash}" build_dir)
 
     # ---- Select the build-system driver -----------------------------------------
     set(bs "cmake")
@@ -269,7 +259,7 @@ function(cdpm_build_dependency pkg_name pkg_version config_hash meta_json)
         message(FATAL_ERROR "[cdpm] package '${name}': unknown build_system '${bs}'.")
     endif()
 
-    set(driver_path "${__CDPM_BUILD_ROOT}/${bs_module}")
+    set(driver_path "${__CDPM_ROOT}/${bs_module}")
     if(NOT EXISTS "${driver_path}")
         message(FATAL_ERROR "[cdpm] package '${name}': build-system driver module not found: "
             "${driver_path}")

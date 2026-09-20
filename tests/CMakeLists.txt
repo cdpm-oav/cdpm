@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.25...4.0)
 
 project(cdpm_tests)
 
@@ -149,10 +149,17 @@ add_unit_tests(MODULE cdpm_toolchain
         prepare.semantic_marker
 )
 
-add_unit_tests(MODULE cdpm_context
+add_unit_tests(MODULE cdpm_basics
     PASS
         resolve.defaults
         resolve.overrides
+        resolve.cache_dir
+        resolve.store_dir
+        resolve.slots
+        paths.root_and_core
+        include.policy_baseline
+        include.scope_persistence
+        toolchain.var_list
 )
 
 add_unit_tests(MODULE cdpm_build

@@ -2,17 +2,15 @@
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
-# Resolve cdpm root (parent of core/) so the module works regardless of who included it; 
-# stored in a temporary local variable cleaned up at end of file.
-cmake_path(GET CMAKE_CURRENT_LIST_DIR PARENT_PATH __cdpm_version_module_root)
+include(cdpm_basics)
 
 # Test/embedder override hook: when ``__CDPM_VERSION_FILE`` is set BEFORE this module is included, 
 # that path is read instead of the default ``<root>/VERSION``.
 # Used by ``tests/unit/cdpm_version/**`` to inject fixture files.
 if(NOT DEFINED __CDPM_VERSION_FILE OR __CDPM_VERSION_FILE STREQUAL "")
-    set(__CDPM_VERSION_FILE "${__cdpm_version_module_root}/VERSION")
+    set(__CDPM_VERSION_FILE "${__CDPM_ROOT}/VERSION")
 endif()
 
 # .. rst:
@@ -59,9 +57,6 @@ if(NOT DEFINED __CDPM_VERSION_CACHED)
         )
     endblock()
 endif()
-
-# Drop the local helper; module-private __CDPM_VERSION_* survive.
-unset(__cdpm_version_module_root)
 
 # .. rst:
 # ``_cdpm_get_version(<out_var>)``

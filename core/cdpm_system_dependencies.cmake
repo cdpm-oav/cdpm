@@ -2,10 +2,10 @@
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
 include(cdpm_config)
-include(cdpm_context)
+include(cdpm_basics)
 include(cdpm_toolchain)
 
 # .. rst:
@@ -56,9 +56,8 @@ function(cdpm_probe_system_dependencies pkg_name dependencies_json out_identitie
     set(probe_root "${runtime_dir}/system-probe/${probe_key}")
     file(MAKE_DIRECTORY "${probe_root}")
 
-    set(probe_template [=[cmake_minimum_required(VERSION 3.25)
+    set(probe_template [=[cmake_minimum_required(VERSION 3.25...4.0)
 project(cdpm_system_probe NONE)
-cmake_policy(SET CMP0140 NEW)
 
 function(json_set_string json key value out)
     string(REPLACE "\\" "\\\\" value "${value}")

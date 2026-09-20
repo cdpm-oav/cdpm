@@ -3,23 +3,19 @@
 # by the future cmake provision hook. No platform-specific shell commands -- CMake API only.
 #
 # Modules declare no cmake_minimum_required; the required version is asserted once at the public entry
-# points (cdpm.cmake / cdpm-cli.cmake, both 3.25).
+# points (cdpm.cmake / cdpm-cli.cmake).
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
-# Set the policies this module relies on explicitly (no cmake_minimum_required in modules) so it stays
-# correct when included from a bare script under the 3.25 baseline:
-#   CMP0007 -- list() commands do not silently drop empty elements (index math stays correct).
-cmake_policy(SET CMP0007 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
 include(cdpm_version)
-# Provides the single _cdpm_resolve_store_dir(<out>) contract, cdpm_config_load and cdpm_load_repos.
-# (cdpm_config does not include this module, so there is no include cycle.)
+# Shared foundation: the single _cdpm_resolve_store_dir(<out>) / _cdpm_resolve_*_dir contracts.
+include(cdpm_basics)
+# cdpm_config_load and cdpm_load_repos (cdpm_config does not include this module, so no include cycle).
 include(cdpm_config)
 # Lockfile read/write (cdpm_read_lockfile / cdpm_write_lockfile / cdpm_lockfile_get).
 include(cdpm_lockfile)
-include(cdpm_context)
 include(cdpm_resolve)
 include(cdpm_orchestrator)
 

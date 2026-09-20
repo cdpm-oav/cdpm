@@ -12,7 +12,7 @@
 #   CMAKE_ARGV4 = [--toolchain]   (optional global option or command)
 #   CMAKE_ARGV5 = ...
 
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.25...4.0)
 
 # ---------------------------------------------------------------------------
 # Locate the cdpm root directory (directory containing this script).
@@ -25,8 +25,8 @@ list(PREPEND CMAKE_MODULE_PATH "${__CDPM_ROOT}/core")
 # ---------------------------------------------------------------------------
 # Include core modules.
 # ---------------------------------------------------------------------------
+include(cdpm_basics)
 include(cdpm_cli_commands)
-
 include(cdpm_resolve)
 
 # cdpm_config.cmake is optional at this stage: it may not exist yet while the

@@ -7,7 +7,7 @@
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
 # The CPS revision level implemented by CMake's find_package reader (4.3). Declaring a newer minor makes
 # CMake refuse the file, so pin to the highest revision the target tool accepts.
@@ -15,8 +15,8 @@ set(__CDPM_CPS_VERSION "0.14.1" CACHE INTERNAL "CPS schema revision emitted by c
 
 # JSON helpers (_cdpm_json_keys / _cdpm_json_get), _cdpm_json_set_safe and cdpm_canonical_json.
 include(cdpm_config)
-# Host processor fallback for the platform.isa field in script mode.
-include(cdpm_utils)
+# Host processor fallback (_cdpm_get_host_processor) for the platform.isa field in script mode.
+include(cdpm_basics)
 
 # .. rst:
 # ``_cdpm_cps_find_library(<install_dir> <component> <out_location> <out_inferred_type>)``

@@ -2,7 +2,7 @@
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
 # Shared driver utilities (download/patch/quote helpers).
 include(cdpm_bs_common)

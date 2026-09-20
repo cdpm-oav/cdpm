@@ -2,7 +2,7 @@
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
 # .. rst:
 # ``_cdpm_bs_validate_external_project_value(<str>)``
@@ -168,7 +168,7 @@ endfunction()
 #
 # Generates the common header for an ExternalProject-based mini-project.
 function(_cdpm_bs_miniproject_header project_name out)
-    set(header "cmake_minimum_required(VERSION 3.25)\n")
+    set(header "cmake_minimum_required(VERSION 3.25...4.0)\n")
     string(APPEND header "project(${project_name} NONE)\n")
     string(APPEND header "include(ExternalProject)\n")
     set(${out} "${header}")

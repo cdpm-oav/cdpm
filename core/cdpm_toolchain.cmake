@@ -2,67 +2,12 @@
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
-include(cdpm_context)
-
-# .. rst:
-# ``__CDPM_TOOLCHAIN_VARS_BUILTIN``
-#
-# Built-in allow-list of toolchain variables that are *frozen* into the generated wrapper toolchain.
-#
-# Hunter forwards only ``CMAKE_TOOLCHAIN_FILE`` to child builds, which assumes every global setting lives
-# in that file. That breaks when an IDE (e.g. Android Studio) injects the platform variables as ``-D``
-# cache entries instead of via a toolchain file: the child build would not see them. cdpm therefore freezes
-# a known set of variables - whichever are defined in the parent scope - into a wrapper toolchain that also
-# ``include()``\s the real toolchain. Users extend the list via the ``CDPM_TOOLCHAIN_VARS`` cache variable.
-set(__CDPM_TOOLCHAIN_VARS_BUILTIN
-    # System identity
-    CMAKE_SYSTEM_NAME CMAKE_SYSTEM_VERSION CMAKE_SYSTEM_PROCESSOR
-    # Cross-compile roots
-    CMAKE_SYSROOT CMAKE_FIND_ROOT_PATH
-    CMAKE_FIND_ROOT_PATH_MODE_PACKAGE CMAKE_FIND_ROOT_PATH_MODE_PROGRAM
-    CMAKE_FIND_ROOT_PATH_MODE_LIBRARY CMAKE_FIND_ROOT_PATH_MODE_INCLUDE
-    # Build tooling / type / generator
-    CMAKE_MAKE_PROGRAM CMAKE_BUILD_TYPE
-    CMAKE_GENERATOR_PLATFORM CMAKE_GENERATOR_TOOLSET CMAKE_GENERATOR_INSTANCE
-    # Android (NDK / Android Studio inject these as -D, not via a toolchain file)
-    ANDROID_ABI ANDROID_PLATFORM CMAKE_ANDROID_ARCH_ABI CMAKE_ANDROID_NDK CMAKE_ANDROID_NDK
-    ANDROID_STL ANDROID_ARM_NEON ANDROID_TOOLCHAIN
-    # Apple
-    CMAKE_OSX_ARCHITECTURES CMAKE_OSX_DEPLOYMENT_TARGET CMAKE_OSX_SYSROOT
-    CACHE INTERNAL "cdpm built-in toolchain variable freeze allow-list"
-)
-
-# .. rst:
-# ``__CDPM_TOOLCHAIN_SEMANTIC_NATIVE``
-#
-# Non-empty sentinel stamped into wrapper toolchains for native builds (no external toolchain).
-# An empty marker value is deliberately not used: empty cache values are fragile as presence
-# signals across contexts, while a fixed literal cannot collide with a real 16-hex semantic id.
-set(__CDPM_TOOLCHAIN_SEMANTIC_NATIVE "native"
-    CACHE INTERNAL "cdpm sentinel semantic id for native builds (no external toolchain)"
-)
-
-# .. rst:
-# ``_cdpm_toolchain_var_list(<out_var>)``
-#
-# Returns the effective freeze allow-list: the built-in set (:cmake:variable:`__CDPM_TOOLCHAIN_VARS_BUILTIN`)
-# unioned with the user-provided ``CDPM_TOOLCHAIN_VARS`` cache variable (duplicates removed, order stable).
-# Shared by the wrapper generator and the config hash so both freeze/hash exactly the same variables.
-function(_cdpm_toolchain_var_list out_var)
-    set(vars ${__CDPM_TOOLCHAIN_VARS_BUILTIN})
-    if(DEFINED CDPM_TOOLCHAIN_VARS)
-        list(APPEND vars ${CDPM_TOOLCHAIN_VARS})
-    endif()
-    # Per-language compilers are always frozen (one entry per known language).
-    foreach(lang IN ITEMS C CXX ASM ASM_NASM CUDA OBJC OBJCXX Fortran Swift)
-        list(APPEND vars CMAKE_${lang}_COMPILER CMAKE_${lang}_COMPILER_AR CMAKE_${lang}_COMPILER_RANLIB)
-    endforeach()
-    list(REMOVE_DUPLICATES vars)
-    set(${out_var} "${vars}")
-    return(PROPAGATE ${out_var})
-endfunction()
+# Shared foundation: runtime path resolution, the toolchain freeze allow-list
+# (__CDPM_TOOLCHAIN_VARS_BUILTIN / _cdpm_toolchain_var_list) and the native semantic sentinel
+# (__CDPM_TOOLCHAIN_SEMANTIC_NATIVE) all live in cdpm_basics.
+include(cdpm_basics)
 
 # .. rst:
 # ``_cdpm_toolchain_semantic_id(<tc_path> <allow_list> <out_id>)``

@@ -2,10 +2,10 @@
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
-# JSON iteration helpers.
-include(cdpm_utils)
+# Shared foundation: JSON helpers and the canonical cdpm root (__CDPM_ROOT).
+include(cdpm_basics)
 
 # ExternalProject re-embeds values in bracket arguments through ``cmake_language(EVAL)``. Reject any
 # possible closing bracket delimiter before handing a value to it.
@@ -212,9 +212,9 @@ function(cdpm_bs_cmake_build ctx_json)
             list(APPEND option_keys "${key}")
         endforeach()
     endif()
-    # Provider injection path; derived from the cdpm root cached by cdpm_build.cmake so it stays valid
+    # Provider injection path; derived from the canonical cdpm root (cdpm_basics) so it stays valid
     # even when the caller's module_path is a multi-entry list.
-    set(__inject_file "${__CDPM_BUILD_ROOT}/core/cdpm_provider_inject.cmake")
+    set(__inject_file "${__CDPM_ROOT}/core/cdpm_provider_inject.cmake")
 
     set(separator_index 0)
     set(search_separator ON)
@@ -222,7 +222,7 @@ function(cdpm_bs_cmake_build ctx_json)
         set(list_separator "__CDPM_LIST_SEPARATOR_${separator_index}__")
         set(separator_found FALSE)
         foreach(value IN ITEMS "${install_dir}" "${build_type}" "${toolchain}" "${prefix_path}"
-                "${module_path}" "${user_file}" "${program_path}" "${__inject_file}" "${__CDPM_BUILD_ROOT}"
+                "${module_path}" "${user_file}" "${program_path}" "${__inject_file}" "${__CDPM_ROOT}"
                 "${CDPM_LOCKFILE_PATH}" "${CDPM_PROJECT_DIR}")
             string(FIND "${value}" "${list_separator}" separator_position)
             if(NOT separator_position EQUAL -1)
@@ -291,7 +291,7 @@ function(cdpm_bs_cmake_build ctx_json)
         )
         string(APPEND cache_args_block "\n        ${cache_arg}")
         _cdpm_cmake_quote_cache_argument(
-            "-DCDPM_INJECT_ROOT:PATH=${__CDPM_BUILD_ROOT}" "${list_separator}" cache_arg
+            "-DCDPM_INJECT_ROOT:PATH=${__CDPM_ROOT}" "${list_separator}" cache_arg
         )
         string(APPEND cache_args_block "\n        ${cache_arg}")
         # The nested provider must read the same lockfile as the orchestrator so the nested
@@ -371,7 +371,7 @@ function(cdpm_bs_cmake_build ctx_json)
     endif()
 
     # ---- Assemble the mini-project ----------------------------------------------
-    set(ml "cmake_minimum_required(VERSION 3.25)")
+    set(ml "cmake_minimum_required(VERSION 3.25...4.0)")
     string(APPEND ml "\nproject(cdpm_ep NONE)")
     string(APPEND ml "\ninclude(ExternalProject)")
     string(APPEND ml "\nExternalProject_Add(${ep_target}")

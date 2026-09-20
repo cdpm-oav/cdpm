@@ -6,7 +6,7 @@ include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 cmake_policy(SET CMP0011 NEW)
 cmake_policy(SET CMP0140 NEW)
-include(cdpm_context)
+include(cdpm_basics)
 
 cmake_path(GET CMAKE_CURRENT_LIST_DIR PARENT_PATH tests_dir)
 cmake_path(GET tests_dir PARENT_PATH cdpm_root)

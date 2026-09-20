@@ -2,10 +2,10 @@
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
-# JSON iteration helpers.
-include(cdpm_utils)
+# Shared foundation (brings in JSON helpers for transitive consumers).
+include(cdpm_basics)
 
 # .. rst:
 # ``cdpm_parse_version_range(<spec> <out_low> <out_high> <out_low_incl> <out_high_incl> <out_ok>)``

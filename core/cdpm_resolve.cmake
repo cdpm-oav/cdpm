@@ -2,8 +2,7 @@
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
-cmake_policy(SET CMP0054 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
 include(cdpm_build)
 include(cdpm_lockfile)

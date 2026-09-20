@@ -5,15 +5,7 @@
 
 include_guard(GLOBAL)
 
-if(POLICY CMP0007)
-    cmake_policy(SET CMP0007 NEW)
-endif()
-if(POLICY CMP0057)
-    cmake_policy(SET CMP0057 NEW)
-endif()
-if(POLICY CMP0140)
-    cmake_policy(SET CMP0140 NEW)
-endif()
+cmake_policy(VERSION 3.25...4.0)
 
 # .. rst:
 # ``_cdpm_json_array_to_list(<out_list> <json> [PATH <member|index>...])``

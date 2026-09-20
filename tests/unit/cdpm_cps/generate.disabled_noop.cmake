@@ -1,9 +1,11 @@
 # Test: generate.disabled_noop
-# Generation is opt-in: with CDPM_GENERATE_CPS off (default), no file is written.
+# Generation is gated by CDPM_GENERATE_CPS: with it off, no file is written.
 include(cdpm_cps)
 include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
-# Deliberately do NOT set CDPM_GENERATE_CPS.
+# cdpm_basics defines CDPM_GENERATE_CPS via cmake_dependent_option (default ON on CMake >= 4.3), so the
+# disabled path is exercised by explicitly turning it off.
+set(CDPM_GENERATE_CPS OFF)
 
 set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/disabled_noop")
 file(REMOVE_RECURSE "${tmp}")

@@ -2,13 +2,9 @@
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
-cmake_policy(SET CMP0057 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
-include(cdpm_utils)
-include(cdpm_context)
-
-cmake_path(GET CMAKE_CURRENT_LIST_FILE PARENT_PATH __CDPM_REGISTRY_MODULE_DIR)
+include(cdpm_basics)
 
 # Registry containment assumes that the registry tree is immutable for the complete load, validation, and build.
 # Real-path and regular-file checks prevent static traversal and symbolic-link escapes. CMake has no atomic no-follow
@@ -520,9 +516,9 @@ function(cdpm_validate_registry registry_path out_valid out_diagnostics)
         cmake_path(ABSOLUTE_PATH index_path NORMALIZE OUTPUT_VARIABLE index_path)
     endif()
     execute_process(COMMAND "${CMAKE_COMMAND}"
-            "-DCMAKE_MODULE_PATH=${__CDPM_REGISTRY_MODULE_DIR}"
+            "-DCMAKE_MODULE_PATH=${__CDPM_CORE_DIR}"
             "-DCDPM_REGISTRY_VALIDATION_PATH=${index_path}"
-            -P "${__CDPM_REGISTRY_MODULE_DIR}/cdpm_registry_validation_runner.cmake"
+            -P "${__CDPM_CORE_DIR}/cdpm_registry_validation_runner.cmake"
         RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error TIMEOUT 10
     )
     string(STRIP "${output}\n${error}" diagnostics)

@@ -26,13 +26,12 @@
 
 include_guard(GLOBAL)
 
-cmake_policy(SET CMP0140 NEW)
-cmake_policy(SET CMP0057 NEW)
+cmake_policy(VERSION 3.25...4.0)
 
 # Canonical JSON + the type-safe JSON setter (booleans, string quoting) live in cdpm_config.
 include(cdpm_config)
 include(cdpm_version)
-include(cdpm_context)
+include(cdpm_basics)
 
 # .. rst:
 # ``_cdpm_lockfile_default_path(<out_var>)``
