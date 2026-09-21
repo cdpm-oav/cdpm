@@ -1,5 +1,5 @@
 # Test: in_range.invalid_fatal (WILL_FAIL)
-include(cdpm_verange)
+include(cdpm_version)
 include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 # A malformed range is an authoring error -> fatal.

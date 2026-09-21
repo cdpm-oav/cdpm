@@ -6,7 +6,7 @@ cmake_policy(VERSION 3.25...4.0)
 
 include(cdpm_basics) # Shared foundation: JSON helpers, path resolution (store/project), base primitives.
 include(cdpm_uri) # URI parsing/validation (cdpm_parse_uri) - used by repo source validation.
-include(cdpm_verange) # Version-range primitive (cdpm_parse_version_range) - used to validate patch/option ranges.
+include(cdpm_version)
 include(cdpm_registry)
 
 # =============================================================================
@@ -572,34 +572,14 @@ function(_cdpm_validate_repo_patches pkg_name pkg_json)
             message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': patches[${i}] is missing 'file'.")
         endif()
 
-        # Validate any applies_to ranges by attempting a parse against a dummy version.
-        string(JSON applies ERROR_VARIABLE at_err GET "${entry}" "applies_to")
-        if(NOT at_err)
-            string(JSON applies GET "${entry}" "applies_to")
-            string(JSON at_type ERROR_VARIABLE att_err TYPE "${entry}" "applies_to")
-            if(at_type STREQUAL "STRING")
-                cdpm_parse_version_range("${applies}" lo hi li hii ok)
-                if(NOT ok)
-                    message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': patches[${i}] applies_to "
-                        "'${applies}' is not a valid version range.")
-                endif()
-            elseif(at_type STREQUAL "ARRAY")
-                string(JSON ac LENGTH "${applies}")
-                if(ac GREATER 0)
-                    math(EXPR al "${ac} - 1")
-                    foreach(j RANGE 0 ${al})
-                        string(JSON v GET "${applies}" ${j})
-                        cdpm_parse_version_range("${v}" lo hi li hii ok)
-                        if(NOT ok)
-                            message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': patches[${i}] "
-                                "applies_to[${j}] '${v}' is not a valid version.")
-                        endif()
-                    endforeach()
-                endif()
-            elseif(NOT at_type STREQUAL "OBJECT")
-                message(FATAL_ERROR "[cdpm] repo package '${pkg_name}': patches[${i}] applies_to must "
-                    "be a string, array, or object.")
+        string(JSON applies_type ERROR_VARIABLE applies_err TYPE "${entry}" applies_to)
+        if(NOT applies_err)
+            string(JSON applies GET "${entry}" applies_to)
+            if(applies_type STREQUAL "STRING")
+                _cdpm_json_set_safe("[]" 0 "${applies}" STRING applies)
             endif()
+            _cdpm_validate_version_ranges("${applies}"
+                "repo package '${pkg_name}': patches[${i}] applies_to")
         endif()
     endforeach()
 endfunction()
@@ -1452,30 +1432,6 @@ function(cdpm_find_in_repo pkg_name out_found out_meta_json)
     set(${out_found} "${found}")
     set(${out_meta_json} "${meta}")
     return(PROPAGATE ${out_found} ${out_meta_json})
-endfunction()
-
-# .. rst:
-# ``_cdpm_version_satisfies(<requested> <compat_version> <version> <out_ok>)``
-#
-# CPS compatibility check: a request ``R`` is satisfied by a chosen package ``version`` when
-# ``compat_version <= R <= version``. When the package declares no ``compat_version``, only an exact match
-# (``R == version``) qualifies (a conservative default - no implicit backward compatibility). Sets
-# ``<out_ok>`` to TRUE/FALSE. Version ranges in the request are out of scope for v1: a single exact version
-# token is expected on the right-hand side.
-function(_cdpm_version_satisfies requested compat_version version out_ok)
-    set(${out_ok} FALSE PARENT_SCOPE)
-
-    if(compat_version STREQUAL "")
-        if(requested VERSION_EQUAL "${version}")
-            set(${out_ok} TRUE PARENT_SCOPE)
-        endif()
-        return()
-    endif()
-
-    # compat_version <= requested <= version
-    if(NOT requested VERSION_LESS "${compat_version}" AND NOT requested VERSION_GREATER "${version}")
-        set(${out_ok} TRUE PARENT_SCOPE)
-    endif()
 endfunction()
 
 # .. rst:

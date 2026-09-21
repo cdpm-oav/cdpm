@@ -1,5 +1,5 @@
 # Test: parse.brackets
-include(cdpm_verange)
+include(cdpm_version)
 include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 # Half-open [a->b): inclusive low, exclusive high.

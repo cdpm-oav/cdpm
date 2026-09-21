@@ -1,6 +1,10 @@
 # Test: in_ranges.forms_and_excludes
-include(cdpm_verange)
+include(cdpm_version)
 include("${CDPM_TEST_HELPERS}/helpers.cmake")
+
+_cdpm_validate_version_ranges("\"[10.0->12.0)\"" "string form")
+_cdpm_validate_version_ranges("[\"10.0.0\",\"10.1.1\"]" "array form")
+_cdpm_validate_version_ranges("{\"from\":\"10.0\",\"to\":\"12.0\"}" "object form")
 
 # String form + exclude hole.
 cdpm_version_in_ranges("11.0.0" "\"[10.0->12.0)\"" "[\"10.2.1\"]" r)

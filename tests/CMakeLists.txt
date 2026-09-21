@@ -104,17 +104,17 @@ add_unit_tests(MODULE cdpm_version
         get_version.empty_file_fallback
         get_version.non_semver_used_as_is
         get_version.cache_persists
-)
-
-add_unit_tests(MODULE cdpm_verange
-    PASS
+        include.from_function_scope
         parse.brackets
         parse.open_ends
         in_range.membership
         in_ranges.forms_and_excludes
+        version_satisfies
         require_exact.accepts_exact
     FAIL
         in_range.invalid_fatal
+        parse.rejects_malformed_token
+        validate.rejects_malformed_object
         require_exact.rejects_range
         require_exact.rejects_star
         require_exact.rejects_malformed
@@ -282,6 +282,7 @@ add_unit_tests(MODULE cdpm_config
         get_package_user_kv.missing_value
         load_repo.unknown_build_system
         load_repo.bad_version_range
+        load_repo.bad_patch_range_object
         load_repo.invalid_option_key
         load_repo.invalid_rev
         load_repo.invalid_sha256
@@ -308,6 +309,7 @@ add_unit_tests(MODULE cdpm_registry
         load.masks_overlay
         load.repeated_masks
         load.root_index_fifo
+        resolve_patch_list.forms_and_order
         validate.api
         validate.cli
         load.malformed_index

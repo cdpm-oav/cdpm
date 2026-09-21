@@ -7,6 +7,7 @@ cmake_policy(VERSION 3.25...4.0)
 include(cdpm_build)
 include(cdpm_lockfile)
 include(cdpm_system_dependencies)
+include(cdpm_version)
 
 function(_cdpm_resolver_set_map_member property key value)
     get_property(map GLOBAL PROPERTY "${property}")

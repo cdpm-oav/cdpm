@@ -6,8 +6,8 @@ cmake_policy(VERSION 3.25...4.0)
 
 # Shared foundation (paths, JSON helpers), config (source/options/user), toolchain synthesis, config hash.
 include(cdpm_basics)
-include(cdpm_verange)
 include(cdpm_config)
+include(cdpm_registry)
 include(cdpm_toolchain)
 include(cdpm_hash)
 include(cdpm_cps)

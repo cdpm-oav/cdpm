@@ -1,5 +1,5 @@
 # Test: require_exact.rejects_point_range (WILL_FAIL)
-include(cdpm_verange)
+include(cdpm_version)
 include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 # Even a closed point range written in bracket syntax must be rejected as a range request.

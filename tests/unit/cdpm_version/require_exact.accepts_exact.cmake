@@ -1,5 +1,5 @@
 # Test: require_exact.accepts_exact
-include(cdpm_verange)
+include(cdpm_version)
 include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 # Numeric exact versions are returned unchanged.

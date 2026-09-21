@@ -1,5 +1,5 @@
 # Test: require_exact.rejects_range (WILL_FAIL)
-include(cdpm_verange)
+include(cdpm_version)
 include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 # Bracketed version ranges must be rejected with a clear error.

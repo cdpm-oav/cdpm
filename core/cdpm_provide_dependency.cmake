@@ -5,7 +5,7 @@ include_guard(GLOBAL)
 cmake_policy(VERSION 3.25...4.0)
 
 include(cdpm_resolve)
-include(cdpm_verange)
+include(cdpm_version)
 
 # .. rst:
 # ``_cdpm_apply_find_module_hints(<meta_json> <install_dir>)``

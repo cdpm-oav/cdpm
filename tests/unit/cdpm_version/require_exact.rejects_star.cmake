@@ -1,5 +1,5 @@
 # Test: require_exact.rejects_star (WILL_FAIL)
-include(cdpm_verange)
+include(cdpm_version)
 include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 # The "any version" wildcard must be rejected.

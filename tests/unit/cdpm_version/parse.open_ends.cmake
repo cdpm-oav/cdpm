@@ -1,5 +1,5 @@
 # Test: parse.open_ends
-include(cdpm_verange)
+include(cdpm_version)
 include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 # Open high end [a->).

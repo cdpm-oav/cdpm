@@ -1,5 +1,5 @@
 # Test: in_range.membership
-include(cdpm_verange)
+include(cdpm_version)
 include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 # [10.0->12.0): 10.0 in, 11.x in, 12.0 out, 9.x out.
