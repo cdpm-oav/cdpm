@@ -6,7 +6,7 @@ include_guard(GLOBAL)
 message(STATUS "[cdpm] Setup dependency magic")
 
 # Add cdpm modules path as first path to find
-cmake_path(SET __CDPM_CORE_MODULE_PATH SET "${CMAKE_CURRENT_LIST_DIR}/core")
+cmake_path(SET __CDPM_CORE_MODULE_PATH NORMALIZE "${CMAKE_CURRENT_LIST_DIR}/core")
 if(NOT __CDPM_CORE_MODULE_PATH IN_LIST CMAKE_MODULE_PATH)
     list(PREPEND CMAKE_MODULE_PATH "${__CDPM_CORE_MODULE_PATH}")
 endif()
