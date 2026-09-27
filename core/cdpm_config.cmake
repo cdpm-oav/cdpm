@@ -1439,7 +1439,7 @@ endfunction()
 #                        <out_version> <out_compat_version>)``
 #
 # Selects the effective version of ``<pkg_name>`` honoring the priority chain and validates it against the
-# ``find_package()`` constraint.
+# ``find_package()`` constraint. ``EXACT`` requires equality instead of CPS compatibility.
 #
 # Selection priority (high -> low):
 #   1. ``CDPM_<PKG>_VERSION`` cache variable (PKG upper-cased; debug/CI)
@@ -1447,21 +1447,25 @@ endfunction()
 #        layer merge; the two are not distinguished here in v1 - the diagnostic source is reported as
 #        "config")
 #   4. ``cdpm.lock.json`` pin (the cached ``CDPM_LOCKFILE_JSON`` global, when a lockfile was loaded)
-#   5. ``meta_json.default_version`` from the repository
+#   5. Repository ``default_version`` when compatible, otherwise the highest compatible version in
+#      ``meta_json.versions`` (also used when no default is declared but a request is present).
 #
-# The lockfile is treated as a cache of previous resolutions, not a hard constraint. It is therefore skipped
-# when a higher-priority source is in effect, and also when the user passes ``--no-lockfile`` on the CLI
-# (which sets ``CDPM_SKIP_LOCKFILE``).
+# An existing cache, config or lockfile pin is never replaced to satisfy a request. The lockfile is skipped
+# when a higher-priority source is in effect or ``CDPM_SKIP_LOCKFILE`` is set.
 #
 # The chosen version must exist in ``meta_json.versions``. ``<requested_version>`` (possibly empty) is the
-# find_package constraint; if non-empty it is validated via :cmake:command:`_cdpm_version_satisfies`
-# against the chosen version's ``compat_version``. A failure is fatal and names the selection source.
+# find_package constraint; if non-empty it is checked with ``_cdpm_version_satisfies`` against each
+# candidate's ``compat_version``. With no request, the repository default is required as before.
 #
 # Returns the chosen version in ``<out_version>`` and that version's ``compat_version`` (possibly empty) in
 # ``<out_compat_version>`` so the provider can answer ``find_package`` with the correct CPS
 # ``compat_version``.
 function(cdpm_resolve_version pkg_name meta_json requested_version out_version out_compat_version)
-    cmake_parse_arguments(arg "HOST" "" "" ${ARGN})
+    cmake_parse_arguments(arg "HOST;EXACT" "" "" ${ARGN})
+    set(match_args "")
+    if(arg_EXACT)
+        list(APPEND match_args EXACT)
+    endif()
     string(TOLOWER "${pkg_name}" name)
     string(TOUPPER "${pkg_name}" upper)
 
@@ -1513,6 +1517,47 @@ function(cdpm_resolve_version pkg_name meta_json requested_version out_version o
             set(selected "${def_ver}")
             set(source "repository default_version")
         endif()
+        if(NOT requested_version STREQUAL "")
+            set(default_ok FALSE)
+            if(NOT selected STREQUAL "")
+                string(JSON default_obj ERROR_VARIABLE default_err GET "${meta_json}" "versions" "${selected}")
+                if(default_err)
+                    message(FATAL_ERROR "[cdpm] package '${name}': repository default_version '${selected}' is not "
+                        "present in the repository's versions table.")
+                endif()
+                string(JSON default_compat ERROR_VARIABLE default_compat_err GET "${default_obj}" compat_version)
+                if(default_compat_err)
+                    set(default_compat "")
+                endif()
+                _cdpm_version_satisfies("${requested_version}" "${default_compat}" "${selected}" default_ok
+                    ${match_args}
+                )
+            endif()
+            if(NOT default_ok)
+                string(JSON versions GET "${meta_json}" versions)
+                _cdpm_json_keys(available "${versions}")
+                set(selected "")
+                foreach(candidate IN LISTS available)
+                    string(JSON candidate_obj GET "${versions}" "${candidate}")
+                    string(JSON candidate_compat ERROR_VARIABLE candidate_err GET "${candidate_obj}" compat_version)
+                    if(candidate_err)
+                        set(candidate_compat "")
+                    endif()
+                    _cdpm_version_satisfies("${requested_version}" "${candidate_compat}" "${candidate}" ok
+                        ${match_args}
+                    )
+                    if(ok AND (selected STREQUAL "" OR candidate VERSION_GREATER "${selected}"))
+                        set(selected "${candidate}")
+                    endif()
+                endforeach()
+                if(selected STREQUAL "")
+                    list(JOIN available ", " available_list)
+                    message(FATAL_ERROR "[cdpm] package '${name}': no repository version satisfies requested "
+                        "version '${requested_version}' (EXACT=${arg_EXACT}); available versions: ${available_list}.")
+                endif()
+                set(source "repository versions table")
+            endif()
+        endif()
     endif()
 
     if(selected STREQUAL "")
@@ -1534,15 +1579,24 @@ function(cdpm_resolve_version pkg_name meta_json requested_version out_version o
 
     # --- Step 3: validate against the find_package() constraint --------------
     if(NOT requested_version STREQUAL "")
-        _cdpm_version_satisfies("${requested_version}" "${compat}" "${selected}" ok)
+        _cdpm_version_satisfies("${requested_version}" "${compat}" "${selected}" ok ${match_args})
         if(NOT ok)
-            if(compat STREQUAL "")
+            if(arg_EXACT)
+                set(detail "EXACT requires the selected version to equal ${requested_version}")
+            elseif(compat STREQUAL "")
                 set(detail "exact match required (no compat_version declared)")
             else()
-                set(detail "allowed range: ${compat} <= R <= ${selected}")
+                set(detail "allowed range: ${compat} <= ${requested_version} <= ${selected}")
+            endif()
+            if(source MATCHES "cache variable$")
+                set(hint "Change CDPM_${upper}_VERSION to a compatible version.")
+            elseif(source MATCHES "^config")
+                set(hint "Change packages.${name}.version in cdpm.json/cdpm_user.json to a compatible version.")
+            else()
+                set(hint "Update/regenerate the cdpm.lock.json entry or use --no-lockfile / CDPM_SKIP_LOCKFILE.")
             endif()
             message(FATAL_ERROR "[cdpm] package '${name}': requested version '${requested_version}' "
-                "is incompatible with selected '${selected}' (from ${source}); ${detail}.")
+                "is incompatible with selected '${selected}' (from ${source}); ${detail}. ${hint}")
         endif()
     endif()
 

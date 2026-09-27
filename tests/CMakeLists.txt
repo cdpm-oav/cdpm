@@ -266,6 +266,7 @@ add_unit_tests(MODULE cdpm_config
         load_repos.file_and_masks
         resolve_version.cache_override_skips_lockfile
         resolve_version.no_lockfile_flag_skips_lockfile
+        resolve_version.request_selection
         url_template.version_underscored
         load_repos.force_resets_registry
         load_repos.git_local_baseline
@@ -298,6 +299,10 @@ add_unit_tests(MODULE cdpm_config
         load_repo.managed_dependencies_unknown_field
         load_repo.host_dependencies_invalid
         load_repo.duplicate_find_name
+        resolve_version.unsatisfied
+        resolve_version.exact_pin_conflict
+        resolve_version.lock_pin_conflict
+        resolve_version.cache_pin_conflict
 )
 
 add_unit_tests(MODULE cdpm_registry
@@ -361,6 +366,7 @@ add_unit_tests(MODULE cdpm_orchestrator
 
 add_unit_tests(MODULE cdpm_provide_dependency
     PASS
+        find_package.exact_forwarded
         hints.applied
         hints.user_cache_preserved
         host_only.role
@@ -373,6 +379,7 @@ add_unit_tests(MODULE cdpm_resolve
         nested.skip_commit
     FAIL
         resolve.version_conflict
+        resolve.exact_resolved_conflict
         resolve.cycle
         resolve.duplicate_alias
         resolve.host_rejects_target_dependency

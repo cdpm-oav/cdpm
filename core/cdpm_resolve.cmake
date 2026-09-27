@@ -19,6 +19,11 @@ function(_cdpm_resolver_set_map_member property key value)
 endfunction()
 
 function(_cdpm_resolver_resolve_node role package_name requested_version out_record)
+    cmake_parse_arguments(arg "EXACT" "" "" ${ARGN})
+    set(match_args "")
+    if(arg_EXACT)
+        list(APPEND match_args EXACT)
+    endif()
     string(TOUPPER "${role}" role)
     cdpm_find_package_in_repo("${package_name}" found package_key meta)
     if(NOT found)
@@ -47,7 +52,9 @@ function(_cdpm_resolver_resolve_node role package_name requested_version out_rec
             set(compatibility "")
         endif()
         if(NOT requested_version STREQUAL "")
-            _cdpm_version_satisfies("${requested_version}" "${compatibility}" "${selected_version}" compatible)
+            _cdpm_version_satisfies("${requested_version}" "${compatibility}" "${selected_version}" compatible
+                ${match_args}
+            )
             if(NOT compatible)
                 message(FATAL_ERROR "[cdpm] managed dependency version conflict for '${identity_key}': already "
                     "resolved to '${selected_version}', but another edge requests '${requested_version}'.")
@@ -64,9 +71,9 @@ function(_cdpm_resolver_resolve_node role package_name requested_version out_rec
     set_property(GLOBAL PROPERTY __CDPM_RESOLVER_STACK "${stack}")
 
     if(role STREQUAL "HOST")
-        cdpm_resolve_version("${node_key}" "${meta}" "${requested_version}" version compatibility HOST)
+        cdpm_resolve_version("${node_key}" "${meta}" "${requested_version}" version compatibility HOST ${match_args})
     else()
-        cdpm_resolve_version("${node_key}" "${meta}" "${requested_version}" version compatibility)
+        cdpm_resolve_version("${node_key}" "${meta}" "${requested_version}" version compatibility ${match_args})
     endif()
     cdpm_get_package_dependencies("${node_key}" "${meta}" "${version}" dependencies)
     cdpm_get_package_host_dependencies("${node_key}" "${meta}" "${version}" host_dependencies)
@@ -302,9 +309,9 @@ endfunction()
 
 # .. rst:
 # ``cdpm_resolve_and_build(<pkg_name> <requested_version> <out_context_json>
-#                          [LOCK_MODE UPDATE|VERIFY] [VALIDATE_ONLY] [ROLE TARGET|HOST])``
+#                          [LOCK_MODE UPDATE|VERIFY] [VALIDATE_ONLY] [ROLE TARGET|HOST] [EXACT])``
 function(cdpm_resolve_and_build pkg_name requested_version out_context_json)
-    cmake_parse_arguments(arg "VALIDATE_ONLY" "LOCK_MODE;ROLE" "" ${ARGN})
+    cmake_parse_arguments(arg "VALIDATE_ONLY;EXACT" "LOCK_MODE;ROLE" "" ${ARGN})
     if(NOT DEFINED arg_LOCK_MODE OR arg_LOCK_MODE STREQUAL "")
         set(arg_LOCK_MODE UPDATE)
     endif()
@@ -361,7 +368,11 @@ function(cdpm_resolve_and_build pkg_name requested_version out_context_json)
     set_property(GLOBAL PROPERTY __CDPM_RESOLVER_BUILD_ORDER "")
     set_property(GLOBAL PROPERTY __CDPM_RESOLVER_VALIDATE_ONLY "${arg_VALIDATE_ONLY}")
     set_property(GLOBAL PROPERTY __CDPM_RESOLVER_NESTED "${nested}")
-    _cdpm_resolver_resolve_node("${arg_ROLE}" "${pkg_name}" "${requested_version}" root_record)
+    set(root_args "")
+    if(arg_EXACT)
+        list(APPEND root_args EXACT)
+    endif()
+    _cdpm_resolver_resolve_node("${arg_ROLE}" "${pkg_name}" "${requested_version}" root_record ${root_args})
 
     if(arg_LOCK_MODE STREQUAL "UPDATE" AND NOT nested)
         get_property(staged_entries GLOBAL PROPERTY __CDPM_RESOLVER_STAGED_ENTRIES)
