@@ -4,8 +4,8 @@ include(cdpm_config)
 set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/invalid_option_key")
 file(REMOVE_RECURSE "${tmp}")
 file(MAKE_DIRECTORY "${tmp}")
-file(MAKE_DIRECTORY "${tmp}/packages/test")
-file(WRITE "${tmp}/packages/test/package.json" [[{
+file(MAKE_DIRECTORY "${tmp}/packages/t/test")
+file(WRITE "${tmp}/packages/t/test/package.json" [[{
   "source": {"type": "git", "url": "https://example.invalid/test.git"},
   "options": {") message(FATAL_ERROR injected)": "ON"},
   "versions": {"1.0.0": {"rev": "0123456789012345678901234567890123456789"}}

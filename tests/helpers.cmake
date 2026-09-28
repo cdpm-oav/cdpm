@@ -70,3 +70,14 @@ function(assert_json_member json key expected what)
         message(FATAL_ERROR "FAIL: ${what}\n  ${key}: expected '${expected}', actual '${val}'")
     endif()
 endfunction()
+
+# .. rst:
+# ``write_test_registry_package(<root> <name> <json>)`` creates a package in the discoverable registry layout.
+function(write_test_registry_package root name json)
+    string(SUBSTRING "${name}" 0 1 letter)
+    file(MAKE_DIRECTORY "${root}/packages/${letter}/${name}")
+    file(WRITE "${root}/packages/${letter}/${name}/package.json" "${json}")
+    if(NOT EXISTS "${root}/packages.json")
+        file(WRITE "${root}/packages.json" [[{"version":1}]])
+    endif()
+endfunction()

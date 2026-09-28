@@ -5,9 +5,9 @@ include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/alias_canonical")
 file(REMOVE_RECURSE "${tmp}")
-file(MAKE_DIRECTORY "${tmp}/packages/canonical/patches")
-file(WRITE "${tmp}/packages/canonical/patches/fix.diff" "patch bytes")
-file(WRITE "${tmp}/packages/canonical/package.json" [[{
+file(MAKE_DIRECTORY "${tmp}/packages/c/canonical/patches")
+file(WRITE "${tmp}/packages/c/canonical/patches/fix.diff" "patch bytes")
+file(WRITE "${tmp}/packages/c/canonical/package.json" [[{
 "find_package_name":"PublicAlias","source":{"type":"git","url":"https://example.test/canonical.git"},
 "default_version":"1.0.0","versions":{"1.0.0":{"rev":"0123456789abcdef0123456789abcdef01234567",
 "patches":["patches/fix.diff"]}}}]])
@@ -25,7 +25,7 @@ assert_true("${provenance_found}" "canonical key owns manifest-index provenance"
 _cdpm_registry_get_provenance(PublicAlias alias_provenance_found unused)
 assert_false("${alias_provenance_found}" "alias does not create a second provenance identity")
 _cdpm_registry_resolve_patch_path("${package_key}" "patches/fix.diff" patch)
-assert_eq("${patch}" "${tmp}/packages/canonical/patches/fix.diff"
+assert_eq("${patch}" "${tmp}/packages/c/canonical/patches/fix.diff"
     "canonical provenance resolves manifest-relative patches")
 cdpm_compute_config_hash("${package_key}" 1.0.0 "${meta}" hash)
 string(LENGTH "${hash}" hash_length)
@@ -41,7 +41,7 @@ set_property(GLOBAL PROPERTY CDPM_REPO_JSON
 function(cdpm_build_dependency pkg version config_hash build_meta)
     assert_eq("${pkg}" canonical "resolver passes the canonical key to the build and CPS path")
     _cdpm_registry_resolve_patch_path("${pkg}" "patches/fix.diff" build_patch)
-    assert_eq("${build_patch}" "${tmp}/packages/canonical/patches/fix.diff"
+    assert_eq("${build_patch}" "${tmp}/packages/c/canonical/patches/fix.diff"
         "resolver build uses canonical patch provenance")
     _cdpm_cps_compose("${pkg}" "${version}" "${CDPM_STORE_DIR}/${pkg}/${config_hash}" "${build_meta}" cps)
     assert_json_member("${cps}" name canonical "CPS identity is canonical")

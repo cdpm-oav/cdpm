@@ -7,8 +7,8 @@ file(REMOVE_RECURSE "${tmp}")
 file(MAKE_DIRECTORY "${tmp}/install/lib/cmake/Demo")
 file(WRITE "${tmp}/install/lib/cmake/Demo/DemoConfig.cmake" "#")
 
-file(MAKE_DIRECTORY "${tmp}/registry/packages/demo")
-file(WRITE "${tmp}/registry/packages/demo/package.json"
+file(MAKE_DIRECTORY "${tmp}/registry/packages/d/demo")
+file(WRITE "${tmp}/registry/packages/d/demo/package.json"
     [[{"find_package_name":"Demo","host_only":true,
     "source":{"type":"git","url":"https://example.test/demo.git"},
     "default_version":"1.0.0",

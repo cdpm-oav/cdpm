@@ -6,8 +6,8 @@ include("${CDPM_TEST_HELPERS}/helpers.cmake")
 set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/bad_range")
 file(REMOVE_RECURSE "${tmp}")
 file(MAKE_DIRECTORY "${tmp}")
-file(MAKE_DIRECTORY "${tmp}/packages/test")
-file(WRITE "${tmp}/packages/test/package.json"
+file(MAKE_DIRECTORY "${tmp}/packages/t/test")
+file(WRITE "${tmp}/packages/t/test/package.json"
 [[{
   "source": {
     "type": "git",

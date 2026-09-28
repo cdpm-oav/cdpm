@@ -4,12 +4,13 @@ include("${CDPM_TEST_HELPERS}/helpers.cmake")
 set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/load_repos_force_resets_registry")
 file(REMOVE_RECURSE "${tmp}")
 foreach(repo IN ITEMS first second)
-    file(MAKE_DIRECTORY "${tmp}/${repo}/pkg")
+    string(SUBSTRING "${repo}" 0 1 letter)
+    file(MAKE_DIRECTORY "${tmp}/${repo}/packages/${letter}/${repo}")
 endforeach()
-file(WRITE "${tmp}/first/pkg/package.json" [[{"find_package_name":"FirstAlias",
+file(WRITE "${tmp}/first/packages/f/first/package.json" [[{"find_package_name":"FirstAlias",
 "source":{"type":"git","url":"https://first.test/pkg.git"},
 "versions":{"1":{"rev":"0123456789abcdef0123456789abcdef01234567"}}}]])
-file(WRITE "${tmp}/second/pkg/package.json" [[{"find_package_name":"SecondAlias",
+file(WRITE "${tmp}/second/packages/s/second/package.json" [[{"find_package_name":"SecondAlias",
 "source":{"type":"git","url":"https://second.test/pkg.git"},
 "versions":{"1":{"rev":"0123456789abcdef0123456789abcdef01234567"}}}]])
 file(WRITE "${tmp}/first/packages.json" [[{"version":1,"packages":{"first":"pkg/package.json"}}]])

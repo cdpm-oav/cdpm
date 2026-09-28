@@ -4,11 +4,11 @@ include("${CDPM_TEST_HELPERS}/helpers.cmake")
 set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/repeated_masks")
 file(REMOVE_RECURSE "${tmp}")
 foreach(package IN ITEMS a b)
-    file(MAKE_DIRECTORY "${tmp}/first/${package}" "${tmp}/later/${package}")
-    file(WRITE "${tmp}/first/${package}/package.json"
+    file(MAKE_DIRECTORY "${tmp}/first/packages/${package}/${package}" "${tmp}/later/packages/${package}/${package}")
+    file(WRITE "${tmp}/first/packages/${package}/${package}/package.json"
         "{\"source\":{\"type\":\"git\",\"url\":\"https://first.test/${package}.git\"},"
         "\"versions\":{\"1\":{\"rev\":\"0123456789abcdef0123456789abcdef01234567\"}}}")
-    file(WRITE "${tmp}/later/${package}/package.json"
+    file(WRITE "${tmp}/later/packages/${package}/${package}/package.json"
         "{\"source\":{\"type\":\"git\",\"url\":\"https://later.test/${package}.git\"},"
         "\"versions\":{\"1\":{\"rev\":\"0123456789abcdef0123456789abcdef01234567\"}}}")
 endforeach()

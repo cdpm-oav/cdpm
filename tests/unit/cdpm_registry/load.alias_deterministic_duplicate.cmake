@@ -4,8 +4,9 @@ include("${CDPM_TEST_HELPERS}/helpers.cmake")
 set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/alias_deterministic_duplicate")
 file(REMOVE_RECURSE "${tmp}")
 foreach(name IN ITEMS alpha zeta)
-    file(MAKE_DIRECTORY "${tmp}/${name}")
-    file(WRITE "${tmp}/${name}/package.json"
+    string(SUBSTRING "${name}" 0 1 letter)
+    file(MAKE_DIRECTORY "${tmp}/packages/${letter}/${name}")
+    file(WRITE "${tmp}/packages/${letter}/${name}/package.json"
         "{\"find_package_name\":\"SharedAlias\",\"source\":{\"type\":\"git\",\"url\":\"https://example.test/${name}.git\"},\"versions\":{\"1\":{\"rev\":\"0123456789abcdef0123456789abcdef01234567\"}}}")
 endforeach()
 file(WRITE "${tmp}/packages.json"

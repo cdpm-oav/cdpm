@@ -15,8 +15,8 @@ set(CDPM_PROJECT_CONFIG "${tmp}/cdpm.json")
 set(CDPM_USER_CONFIG    "")
 
 # A minimal valid registry: a local-source package needs no per-version integrity pin.
-file(MAKE_DIRECTORY "${tmp}/packages/demo")
-file(WRITE "${tmp}/packages/demo/package.json"
+file(MAKE_DIRECTORY "${tmp}/packages/d/demo")
+file(WRITE "${tmp}/packages/d/demo/package.json"
 [[{"source":{"type":"local","url":"/tmp/demo-src"},"default_version":"1.0.0","versions":{"1.0.0":{}}}]])
 set(registry "${tmp}/packages.json")
 file(WRITE "${registry}"

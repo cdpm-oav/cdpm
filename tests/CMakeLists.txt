@@ -319,13 +319,16 @@ add_unit_tests(MODULE cdpm_registry
         validate.cli
         load.malformed_index
         load.malformed_manifest
-        load.manifest_traversal
+        load.ignored_packages
+        load.digit_first
     FAIL
         load.malformed_value
         load.key_mismatch
-        load.case_collision
-        load.manifest_absolute
+        load.wrong_letter
+        load.uppercase_name
+        load.invalid_name
         load.manifest_symlink_escape
+        load.directory_symlink_escape
         load.patch_absolute
         load.patch_traversal
         load.patch_missing
@@ -339,6 +342,7 @@ add_unit_tests(MODULE cdpm_registry
 )
 set_tests_properties(
     unit.cdpm_registry.load.manifest_symlink_escape
+    unit.cdpm_registry.load.directory_symlink_escape
     unit.cdpm_registry.load.patch_symlink_escape
     unit.cdpm_registry.load.manifest_fifo
     unit.cdpm_registry.load.patch_fifo

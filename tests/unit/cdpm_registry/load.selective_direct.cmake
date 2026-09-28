@@ -3,10 +3,10 @@ include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/selective_direct")
 file(REMOVE_RECURSE "${tmp}")
-file(MAKE_DIRECTORY "${tmp}/packages/good" "${tmp}/packages/bad")
-file(WRITE "${tmp}/packages/good/package.json" [[{"source":{"type":"git","url":"https://example.test/good.git"},
+file(MAKE_DIRECTORY "${tmp}/packages/g/good" "${tmp}/packages/b/bad")
+file(WRITE "${tmp}/packages/g/good/package.json" [[{"source":{"type":"git","url":"https://example.test/good.git"},
 "versions":{"1":{"rev":"0123456789abcdef0123456789abcdef01234567"}}}]])
-file(WRITE "${tmp}/packages/bad/package.json" "not-json")
+file(WRITE "${tmp}/packages/b/bad/package.json" "not-json")
 file(WRITE "${tmp}/packages.json"
     [[{"version":1,"packages":{"bad":"packages/bad/package.json","good":"packages/good/package.json"}}]])
 

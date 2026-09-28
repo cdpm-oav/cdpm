@@ -3,8 +3,8 @@ include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/find_module_reserved_prefix")
 file(REMOVE_RECURSE "${tmp}")
-file(MAKE_DIRECTORY "${tmp}/packages/demo")
-file(WRITE "${tmp}/packages/demo/package.json"
+file(MAKE_DIRECTORY "${tmp}/packages/d/demo")
+file(WRITE "${tmp}/packages/d/demo/package.json"
     [[{"find_package_name":"Demo","find_module":{"CMAKE_PROJECT_TOP_LEVEL_INCLUDES":"evil.cmake"},
     "source":{"type":"git","url":"https://example.test/demo.git"},
     "default_version":"1.0.0",

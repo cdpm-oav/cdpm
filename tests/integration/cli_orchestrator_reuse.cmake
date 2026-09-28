@@ -26,8 +26,8 @@ if(DEFINED CMAKE_GENERATOR AND NOT CMAKE_GENERATOR STREQUAL "")
 endif()
 
 # Local registry declaring greet.
-file(MAKE_DIRECTORY "${tmp}/packages/greet")
-file(WRITE "${tmp}/packages/greet/package.json" [[{
+file(MAKE_DIRECTORY "${tmp}/packages/g/greet")
+file(WRITE "${tmp}/packages/g/greet/package.json" [[{
   "build_system": "cmake",
   "source": { "type": "git", "url": "https://example.invalid/greet.git" },
   "default_version": "1.0.0",

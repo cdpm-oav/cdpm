@@ -4,7 +4,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/fixture_helpers.cmake")
 
 init_registry_fixture(valid tmp)
 file(WRITE "${tmp}/packages.json"
-    [[{"version":1,"packages":{"Demo":"packages/demo/package.json"}}]])
+    [[{"version":1,"packages":{"wrong":"missing.json"}}]])
 set_property(GLOBAL PROPERTY CDPM_MERGED_REPO "")
 set_property(GLOBAL PROPERTY CDPM_REPO_PROVENANCE "")
 set_property(GLOBAL PROPERTY CDPM_REPO_JSON
@@ -12,7 +12,7 @@ set_property(GLOBAL PROPERTY CDPM_REPO_JSON
 cdpm_load_repos()
 
 cdpm_find_in_repo(demo found meta)
-assert_true("${found}" "normalized manifest-index package is registered")
+assert_true("${found}" "discovered package is registered despite stale index map")
 assert_json_member("${meta}" find_package_name Demo "manifest metadata is materialized")
 string(FIND "${meta}" "manifest_dir" leaked)
 assert_eq("${leaked}" "-1" "private provenance is absent from canonical metadata")

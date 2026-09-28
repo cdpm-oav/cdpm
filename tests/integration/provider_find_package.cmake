@@ -35,8 +35,8 @@ endif()
 
 # ---- Local registry declaring greet (git source is a placeholder; never fetched because the
 #      consumer config supplies a local source_override that wins). -----------------------------
-file(MAKE_DIRECTORY "${tmp}/packages/greet")
-file(WRITE "${tmp}/packages/greet/package.json" [[{
+file(MAKE_DIRECTORY "${tmp}/packages/g/greet")
+file(WRITE "${tmp}/packages/g/greet/package.json" [[{
   "build_system": "cmake",
   "source": { "type": "git", "url": "https://example.invalid/greet.git" },
   "default_version": "1.0.0",

@@ -9,11 +9,11 @@ file(REMOVE_RECURSE "${tmp}")
 file(MAKE_DIRECTORY "${tmp}")
 
 # A repo file with two packages; the mask only owns 'fmt'.
-file(MAKE_DIRECTORY "${tmp}/packages/fmt" "${tmp}/packages/zlib")
-file(WRITE "${tmp}/packages/fmt/package.json"
+file(MAKE_DIRECTORY "${tmp}/packages/f/fmt" "${tmp}/packages/z/zlib")
+file(WRITE "${tmp}/packages/f/fmt/package.json"
 [[{"source":{"type":"git","url":"https://example/fmt.git"},
 "versions":{"1.0.0":{"rev":"deadbeefcafedeadbeefcafedeadbeefdeadbeef"}}}]])
-file(WRITE "${tmp}/packages/zlib/package.json"
+file(WRITE "${tmp}/packages/z/zlib/package.json"
 [[{"source":{"type":"git","url":"https://example/zlib.git"},
 "versions":{"1.0.0":{"rev":"cafedeadbeefcafedeadbeefcafedeadbeefcafe"}}}]])
 file(WRITE "${tmp}/packages.json"

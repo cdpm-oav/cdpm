@@ -4,7 +4,7 @@ include("${CDPM_TEST_HELPERS}/helpers.cmake")
 
 set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/find_package_exact_forwarded")
 file(REMOVE_RECURSE "${tmp}")
-file(MAKE_DIRECTORY "${tmp}/install/lib/cmake/Demo" "${tmp}/registry/packages/demo")
+file(MAKE_DIRECTORY "${tmp}/install/lib/cmake/Demo" "${tmp}/registry/packages/d/demo")
 file(WRITE "${tmp}/install/lib/cmake/Demo/DemoConfig.cmake" "# Installed fixture\n")
 file(WRITE "${tmp}/install/lib/cmake/Demo/DemoConfigVersion.cmake" [[
 set(PACKAGE_VERSION "12.1.0")
@@ -13,7 +13,7 @@ if(PACKAGE_FIND_VERSION VERSION_EQUAL PACKAGE_VERSION)
     set(PACKAGE_VERSION_COMPATIBLE TRUE)
 endif()
 ]])
-file(WRITE "${tmp}/registry/packages/demo/package.json" [[{"find_package_name":"Demo",
+file(WRITE "${tmp}/registry/packages/d/demo/package.json" [[{"find_package_name":"Demo",
     "source":{"type":"git","url":"https://example.test/demo.git"},
     "default_version":"11.2.0",
     "versions":{"11.2.0":{"rev":"0123456789abcdef0123456789abcdef01234567"},

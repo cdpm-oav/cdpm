@@ -42,8 +42,8 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/build-context.txt" DESTINATION ".")
 install(DIRECTORY include/ DESTINATION include)
 ]=])
 
-file(MAKE_DIRECTORY "${project}/registry/packages/greet")
-file(WRITE "${project}/registry/packages/greet/package.json" [=[
+file(MAKE_DIRECTORY "${project}/registry/packages/g/greet")
+file(WRITE "${project}/registry/packages/g/greet/package.json" [=[
 {
   "build_system": "cmake",
   "source": { "type": "local", "url": "./fixture" },

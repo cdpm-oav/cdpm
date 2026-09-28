@@ -1152,9 +1152,8 @@ endfunction()
 # ``cdpm_load_repo(<repo_file> [PACKAGES <masks_json>])``
 #
 # Loads, validates, and registers one package repository file (``packages.json``). Validation covers:
-# ``version`` dispatch (version 1 manifest index), structural checks, per-package
-# source/integrity rules, and ``@ref`` bans. Package keys are normalized to lower-case; a collision after
-# normalization is a fatal error.
+# ``version`` dispatch (version 1), structural checks, per-package source/integrity rules, and ``@ref`` bans.
+# Manifests are discovered at ``packages/<first-character>/<name>/package.json`` next to the index.
 #
 # ``PACKAGES`` is the optional JSON array of ownership masks from the ``repos[]`` entry
 # (``["boost-*", "openssl"]``); only packages matching a mask are registered from this file

@@ -15,7 +15,7 @@ cmake_path(GET tests_dir PARENT_PATH cdpm_root)
 set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/host_tool_graph")
 file(REMOVE_RECURSE "${tmp}")
 file(MAKE_DIRECTORY "${tmp}/sources/host-tool-pkg" "${tmp}/sources/target-pkg"
-    "${tmp}/registry/packages" "${tmp}/project")
+    "${tmp}/registry/packages/h/host-tool-pkg" "${tmp}/registry/packages/t/target-pkg" "${tmp}/project")
 
 set(registry_dir "${tmp}/registry")
 set(project_dir "${tmp}/project")
@@ -62,11 +62,8 @@ install(FILES
 ]=])
 
 # ---- Local registry -----------------------------------------------------------
-file(WRITE "${registry_dir}/packages/host-tool-pkg/package.json" "${registry_dir}/packages/host-tool-pkg/package.json")
-file(WRITE "${registry_dir}/packages/target-pkg/package.json" "${registry_dir}/packages/target-pkg/package.json")
-
-set(host_tool_manifest "${registry_dir}/packages/host-tool-pkg/package.json")
-set(target_pkg_manifest "${registry_dir}/packages/target-pkg/package.json")
+set(host_tool_manifest "${registry_dir}/packages/h/host-tool-pkg/package.json")
+set(target_pkg_manifest "${registry_dir}/packages/t/target-pkg/package.json")
 
 file(WRITE "${host_tool_manifest}" "{")
 file(APPEND "${host_tool_manifest}" "\n  \"build_system\": \"cmake\",")

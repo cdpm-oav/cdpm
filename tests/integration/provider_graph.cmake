@@ -44,10 +44,10 @@ project(bad NONE)
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/BadParentConfig.cmake" DESTINATION lib/cmake/BadParent)
 ]])
 
-file(MAKE_DIRECTORY "${tmp}/packages/leaf" "${tmp}/packages/parent" "${tmp}/packages/bad")
-file(WRITE "${tmp}/packages/leaf/package.json" "{\"find_package_name\":\"ManagedLeaf\",\"source\":{\"type\":\"local\",\"url\":\"${tmp}/leaf\"},\"default_version\":\"1\",\"versions\":{\"1\":{}}}")
-file(WRITE "${tmp}/packages/parent/package.json" "{\"find_package_name\":\"ManagedParent\",\"source\":{\"type\":\"local\",\"url\":\"${tmp}/parent\"},\"default_version\":\"1\",\"dependencies\":{\"leaf\":{}},\"system_dependencies\":{\"FakeConfig\":{\"mode\":\"CONFIG\",\"identity_targets\":[\"FakeConfig::Fake\"]},\"FakeModule\":{\"mode\":\"MODULE\",\"identity_targets\":[\"FakeModule::Fake\"]}},\"versions\":{\"1\":{}}}")
-file(WRITE "${tmp}/packages/bad/package.json" "{\"find_package_name\":\"BadParent\",\"source\":{\"type\":\"local\",\"url\":\"${tmp}/bad\"},\"default_version\":\"1\",\"versions\":{\"1\":{}}}")
+file(MAKE_DIRECTORY "${tmp}/packages/l/leaf" "${tmp}/packages/p/parent" "${tmp}/packages/b/bad")
+file(WRITE "${tmp}/packages/l/leaf/package.json" "{\"find_package_name\":\"ManagedLeaf\",\"source\":{\"type\":\"local\",\"url\":\"${tmp}/leaf\"},\"default_version\":\"1\",\"versions\":{\"1\":{}}}")
+file(WRITE "${tmp}/packages/p/parent/package.json" "{\"find_package_name\":\"ManagedParent\",\"source\":{\"type\":\"local\",\"url\":\"${tmp}/parent\"},\"default_version\":\"1\",\"dependencies\":{\"leaf\":{}},\"system_dependencies\":{\"FakeConfig\":{\"mode\":\"CONFIG\",\"identity_targets\":[\"FakeConfig::Fake\"]},\"FakeModule\":{\"mode\":\"MODULE\",\"identity_targets\":[\"FakeModule::Fake\"]}},\"versions\":{\"1\":{}}}")
+file(WRITE "${tmp}/packages/b/bad/package.json" "{\"find_package_name\":\"BadParent\",\"source\":{\"type\":\"local\",\"url\":\"${tmp}/bad\"},\"default_version\":\"1\",\"versions\":{\"1\":{}}}")
 set(registry "${tmp}/packages.json")
 file(WRITE "${registry}" "{\"version\":1,\"packages\":{"
     "\"leaf\":\"packages/leaf/package.json\","

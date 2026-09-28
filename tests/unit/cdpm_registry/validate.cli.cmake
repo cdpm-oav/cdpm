@@ -6,11 +6,11 @@ cmake_path(GET tests_dir PARENT_PATH cdpm_root)
 set(cli "${cdpm_root}/cdpm-cli.cmake")
 set(tmp "${CMAKE_CURRENT_LIST_DIR}/.tmp/validate_cli")
 file(REMOVE_RECURSE "${tmp}")
-file(MAKE_DIRECTORY "${tmp}/valid/demo" "${tmp}/invalid/demo")
-file(WRITE "${tmp}/valid/demo/package.json" [[{"source":{"type":"git","url":"https://example.test/demo.git"},
+file(MAKE_DIRECTORY "${tmp}/valid/packages/d/demo" "${tmp}/invalid/packages/d/demo")
+file(WRITE "${tmp}/valid/packages/d/demo/package.json" [[{"source":{"type":"git","url":"https://example.test/demo.git"},
 "versions":{"1":{"rev":"0123456789abcdef0123456789abcdef01234567"}}}]])
 file(WRITE "${tmp}/valid/packages.json" [[{"version":1,"packages":{"demo":"demo/package.json"}}]])
-file(WRITE "${tmp}/invalid/demo/package.json" "not-json")
+file(WRITE "${tmp}/invalid/packages/d/demo/package.json" "not-json")
 file(WRITE "${tmp}/invalid/packages.json" [[{"version":1,"packages":{"demo":"demo/package.json"}}]])
 file(SHA256 "${tmp}/valid/packages.json" before)
 

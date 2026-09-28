@@ -17,8 +17,9 @@ if(NOT fifo_result EQUAL 0)
     message(STATUS "SKIP: POSIX FIFO unavailable")
     return()
 endif()
-file(WRITE "${tmp}/package.json" [[{"source":{"type":"git","url":"https://example.test/demo.git"},
+file(MAKE_DIRECTORY "${tmp}/packages/d/demo")
+file(WRITE "${tmp}/packages/d/demo/package.json" [[{"source":{"type":"git","url":"https://example.test/demo.git"},
 "versions":{"1":{"rev":"0123456789abcdef0123456789abcdef01234567","patches":["patches/fix.diff"]}}}]])
-file(WRITE "${tmp}/packages.json" [[{"version":1,"packages":{"demo":"package.json"}}]])
+file(WRITE "${tmp}/packages.json" [[{"version":1}]])
 cdpm_load_repo("${tmp}/packages.json")
 cdpm_find_in_repo(demo found meta)

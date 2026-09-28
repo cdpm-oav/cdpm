@@ -1,0 +1,6 @@
+include(cdpm_config)
+include("${CMAKE_CURRENT_LIST_DIR}/fixture_helpers.cmake")
+init_registry_fixture(invalid_name tmp)
+file(RENAME "${tmp}/packages/d/demo" "${tmp}/packages/d/demo@bad")
+file(WRITE "${tmp}/packages.json" [[{"version":1}]])
+cdpm_load_repo("${tmp}/packages.json")

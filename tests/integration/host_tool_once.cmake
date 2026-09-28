@@ -15,8 +15,8 @@ file(REMOVE_RECURSE "${tmp}")
 file(MAKE_DIRECTORY
     "${tmp}/sources/hosttool"
     "${tmp}/sources/targetpkg"
-    "${tmp}/registry/packages/hosttool"
-    "${tmp}/registry/packages/targetpkg"
+    "${tmp}/registry/packages/h/hosttool"
+    "${tmp}/registry/packages/t/targetpkg"
     "${tmp}/project")
 
 set(registry_dir "${tmp}/registry")
@@ -53,8 +53,8 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/targetpkgConfig.cmake"
 ]=])
 
 # Registry. Variable expansion is required for the local source paths.
-file(WRITE "${registry_dir}/packages/hosttool/package.json" "{")
-file(APPEND "${registry_dir}/packages/hosttool/package.json"
+file(WRITE "${registry_dir}/packages/h/hosttool/package.json" "{")
+file(APPEND "${registry_dir}/packages/h/hosttool/package.json"
     "\n  \"build_system\": \"cmake\","
     "\n  \"find_package_name\": \"hosttool\","
     "\n  \"host_only\": true,"
@@ -63,8 +63,8 @@ file(APPEND "${registry_dir}/packages/hosttool/package.json"
     "\n  \"default_version\": \"1.0.0\","
     "\n  \"versions\": { \"1.0.0\": {} }"
     "\n}")
-file(WRITE "${registry_dir}/packages/targetpkg/package.json" "{")
-file(APPEND "${registry_dir}/packages/targetpkg/package.json"
+file(WRITE "${registry_dir}/packages/t/targetpkg/package.json" "{")
+file(APPEND "${registry_dir}/packages/t/targetpkg/package.json"
     "\n  \"build_system\": \"cmake\","
     "\n  \"find_package_name\": \"targetpkg\","
     "\n  \"host_dependencies\": { \"hosttool\": { \"version\": \"1.0.0\" } },"

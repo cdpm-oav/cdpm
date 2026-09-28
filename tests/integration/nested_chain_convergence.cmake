@@ -18,8 +18,8 @@ file(REMOVE_RECURSE "${tmp}")
 file(MAKE_DIRECTORY
     "${tmp}/sources/apkg"
     "${tmp}/sources/bpkg"
-    "${tmp}/registry/packages/apkg"
-    "${tmp}/registry/packages/bpkg"
+    "${tmp}/registry/packages/a/apkg"
+    "${tmp}/registry/packages/b/bpkg"
     "${tmp}/project")
 
 set(registry_dir "${tmp}/registry")
@@ -59,16 +59,16 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/apkgConfig.cmake"
 ]=])
 
 # Registry. Variable expansion is required for the local source paths.
-file(WRITE "${registry_dir}/packages/bpkg/package.json" "{")
-file(APPEND "${registry_dir}/packages/bpkg/package.json"
+file(WRITE "${registry_dir}/packages/b/bpkg/package.json" "{")
+file(APPEND "${registry_dir}/packages/b/bpkg/package.json"
     "\n  \"build_system\": \"cmake\","
     "\n  \"find_package_name\": \"bpkg\","
     "\n  \"source\": { \"type\": \"local\", \"url\": \"${tmp}/sources/bpkg\" },"
     "\n  \"default_version\": \"1.0.0\","
     "\n  \"versions\": { \"1.0.0\": {} }"
     "\n}")
-file(WRITE "${registry_dir}/packages/apkg/package.json" "{")
-file(APPEND "${registry_dir}/packages/apkg/package.json"
+file(WRITE "${registry_dir}/packages/a/apkg/package.json" "{")
+file(APPEND "${registry_dir}/packages/a/apkg/package.json"
     "\n  \"build_system\": \"cmake\","
     "\n  \"find_package_name\": \"apkg\","
     "\n  \"dependencies\": { \"bpkg\": { \"version\": \"1.0.0\" } },"
