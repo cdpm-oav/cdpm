@@ -29,7 +29,7 @@ endfunction()
 # .. rst:
 # ``_cdpm_json_encode_string(<out_var> <raw>)``
 #
-# Wraps a raw string as a JSON string literal (escapes ``\`` and ``"``). 
+# Wraps a raw string as a JSON string literal (escapes ``\`` and ``"``).
 # Replacement for ``string(JSON ... STRING_ENCODE ...)`` which only exists on CMake >= 4.3.
 function(_cdpm_json_encode_string out_var raw)
     if(CMAKE_VERSION VERSION_GREATER_EQUAL 4.3)
@@ -277,16 +277,6 @@ function(_cdpm_json_append json_var value)
     endif()
     _cdpm_json_set(${json_var} "${value}" TYPE "${a_TYPE}" PATH ${a_PATH} ${n})
     return(PROPAGATE ${json_var})
-endfunction()
-
-# .. rst:
-# ``_cdpm_json_set_safe(<json> <key> <value> <value_type> <out_json>)`` - single-key shim over
-# ``_cdpm_json_set`` (kept for existing call sites).
-function(_cdpm_json_set_safe json key value value_type out_json)
-    set(work "${json}")
-    _cdpm_json_set(work "${value}" TYPE "${value_type}" PATH "${key}")
-    set(${out_json} "${work}")
-    return(PROPAGATE ${out_json})
 endfunction()
 
 # .. rst:

@@ -460,8 +460,8 @@ function(cdpm_cmd_add_registry registry_path scope)
 
     # Build the new entry { "kind": "file", "path": "<abs>" } with proper JSON escaping.
     set(new_entry "{}")
-    _cdpm_json_set_safe("${new_entry}" "kind" "file" "STRING" new_entry)
-    _cdpm_json_set_safe("${new_entry}" "path" "${abs_path}" "STRING" new_entry)
+    _cdpm_json_set(new_entry "file" TYPE "STRING" PATH "kind")
+    _cdpm_json_set(new_entry "${abs_path}" TYPE "STRING" PATH "path")
 
     # Append the entry and write the updated repos[] back into the config document.
     string(JSON repos SET "${repos}" ${repos_len} "${new_entry}")

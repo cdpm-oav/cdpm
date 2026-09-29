@@ -13,7 +13,6 @@ cmake_policy(VERSION 3.25...4.0)
 # CMake refuse the file, so pin to the highest revision the target tool accepts.
 set(__CDPM_CPS_VERSION "0.14.1" CACHE INTERNAL "CPS schema revision emitted by cdpm")
 
-# JSON helpers (_cdpm_json_keys / _cdpm_json_get), _cdpm_json_set_safe and cdpm_canonical_json.
 include(cdpm_config)
 # Host processor fallback (_cdpm_get_host_processor) for the platform.isa field in script mode.
 include(cdpm_basics)
@@ -90,10 +89,10 @@ endfunction()
 #   location-less non-interface component is worse than an absent one).
 function(_cdpm_cps_compose name version install_dir meta_json out_json)
     set(cps "{}")
-    _cdpm_json_set_safe("${cps}" "cps_version" "${__CDPM_CPS_VERSION}" "STRING" cps)
-    _cdpm_json_set_safe("${cps}" "name" "${name}" "STRING" cps)
-    _cdpm_json_set_safe("${cps}" "version" "${version}" "STRING" cps)
-    _cdpm_json_set_safe("${cps}" "cps_path" "@prefix@/lib/cps" "STRING" cps)
+    _cdpm_json_set(cps "${__CDPM_CPS_VERSION}" TYPE "STRING" PATH "cps_version")
+    _cdpm_json_set(cps "${name}" TYPE "STRING" PATH "name")
+    _cdpm_json_set(cps "${version}" TYPE "STRING" PATH "version")
+    _cdpm_json_set(cps "@prefix@/lib/cps" TYPE "STRING" PATH "cps_path")
 
     # version_schema (default "simple").
     set(schema "simple")
@@ -101,12 +100,12 @@ function(_cdpm_cps_compose name version install_dir meta_json out_json)
     if(NOT e_schema AND NOT schema_decl STREQUAL "")
         set(schema "${schema_decl}")
     endif()
-    _cdpm_json_set_safe("${cps}" "version_schema" "${schema}" "STRING" cps)
+    _cdpm_json_set(cps "${schema}" TYPE "STRING" PATH "version_schema")
 
     # compat_version from the resolved version's spec (optional).
     string(JSON compat ERROR_VARIABLE e_compat GET "${meta_json}" "versions" "${version}" "compat_version")
     if(NOT e_compat AND NOT compat STREQUAL "")
-        _cdpm_json_set_safe("${cps}" "compat_version" "${compat}" "STRING" cps)
+        _cdpm_json_set(cps "${compat}" TYPE "STRING" PATH "compat_version")
     endif()
 
     # platform.kernel / platform.isa. Guard with DEFINED first: in ``cmake -P`` script mode
@@ -127,12 +126,12 @@ function(_cdpm_cps_compose name version install_dir meta_json out_json)
     set(has_platform FALSE)
     if(NOT sys_name STREQUAL "")
         string(TOLOWER "${sys_name}" kernel)
-        _cdpm_json_set_safe("${platform}" "kernel" "${kernel}" "STRING" platform)
+        _cdpm_json_set(platform "${kernel}" TYPE "STRING" PATH "kernel")
         set(has_platform TRUE)
     endif()
     if(NOT sys_proc STREQUAL "")
         string(TOLOWER "${sys_proc}" isa)
-        _cdpm_json_set_safe("${platform}" "isa" "${isa}" "STRING" platform)
+        _cdpm_json_set(platform "${isa}" TYPE "STRING" PATH "isa")
         set(has_platform TRUE)
     endif()
     if(has_platform)
@@ -201,9 +200,9 @@ function(_cdpm_cps_compose name version install_dir meta_json out_json)
         endif()
 
         set(cobj "{}")
-        _cdpm_json_set_safe("${cobj}" "type" "${ctype}" "STRING" cobj)
+        _cdpm_json_set(cobj "${ctype}" TYPE "STRING" PATH "type")
         if(NOT location STREQUAL "")
-            _cdpm_json_set_safe("${cobj}" "location" "${location}" "STRING" cobj)
+            _cdpm_json_set(cobj "${location}" TYPE "STRING" PATH "location")
         endif()
         # A CABI static library built from C++ requires the consumer to also link the C++ runtime; declare
         # it so consumers of any language get correct link behaviour (CPS default is ["c"]).
@@ -235,7 +234,7 @@ function(_cdpm_cps_compose name version install_dir meta_json out_json)
                 # not the default under the 3.25 baseline when this module is included from a bare script.
                 list(FIND emitted_comps "${dc}" dc_idx)
                 if(dc_idx GREATER_EQUAL 0)
-                    _cdpm_json_set_safe("${default_arr}" ${default_idx} "${dc}" "STRING" default_arr)
+                    _cdpm_json_set(default_arr "${dc}" TYPE "STRING" PATH ${default_idx})
                     math(EXPR default_idx "${default_idx} + 1")
                 endif()
             endforeach()

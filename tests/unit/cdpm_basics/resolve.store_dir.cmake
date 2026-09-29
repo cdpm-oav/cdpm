@@ -24,7 +24,7 @@ endif()
 # 2. Effective config store_dir is used when no cache override is present.
 unset(CDPM_STORE_DIR)
 set(eff "{}")
-_cdpm_json_set_safe("${eff}" "store_dir" "${tmp}/config-store" "STRING" eff)
+_cdpm_json_set(eff "${tmp}/config-store" TYPE "STRING" PATH "store_dir")
 set_property(GLOBAL PROPERTY CDPM_EFFECTIVE_CONFIG "${eff}")
 _cdpm_resolve_store_dir(from_config NO_CREATE)
 assert_eq("${from_config}" "${tmp}/config-store" "effective config store_dir is honored")

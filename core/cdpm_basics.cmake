@@ -9,8 +9,6 @@ include_guard(GLOBAL)
 
 cmake_policy(VERSION 3.25...4.0)
 
-include(cdpm_json) # JSON helpers shared across modules.
-
 # =============================================================================
 # Root paths
 # =============================================================================
@@ -178,7 +176,11 @@ function(_cdpm_resolve_store_dir out_dir)
         set(dir "")
         get_property(eff GLOBAL PROPERTY CDPM_EFFECTIVE_CONFIG)
         if(eff)
-            string(JSON cfg_dir ERROR_VARIABLE dir_err GET "${eff}" "store_dir")
+            string(JSON cfg_dir 
+                ERROR_VARIABLE dir_err 
+                GET "${eff}" 
+                    "store_dir"
+            )
             if(NOT dir_err AND NOT cfg_dir STREQUAL "")
                 set(dir "${cfg_dir}")
             endif()
@@ -195,6 +197,7 @@ function(_cdpm_resolve_store_dir out_dir)
     if(NOT arg_NO_CREATE)
         file(MAKE_DIRECTORY "${dir}")
     endif()
+
     set(${out_dir} "${dir}")
     return(PROPAGATE ${out_dir})
 endfunction()

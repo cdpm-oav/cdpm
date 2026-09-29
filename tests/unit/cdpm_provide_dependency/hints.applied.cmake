@@ -25,7 +25,7 @@ set(CDPM_RUNTIME_DIR "${tmp}/runtime")
 
 function(cdpm_resolve_and_build pkg req_ver out)
     set(context "{}")
-    _cdpm_json_set_safe("${context}" install_dir "${tmp}/install" STRING context)
+    _cdpm_json_set(context "${tmp}/install" TYPE STRING PATH install_dir)
     string(JSON context SET "${context}" prefixes "[]")
     string(JSON context SET "${context}" host_prefixes "[]")
     string(JSON context SET "${context}" managed "{}")
